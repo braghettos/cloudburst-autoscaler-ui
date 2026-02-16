@@ -1,0 +1,12 @@
+# Build artifacts
+/bin/
+cmd/cloudburst-ui/web/
+web/dist/
+
+# Dependencies
+node_modules/
+
+# IDE & misc
+*.log
+.DS_Store
+*.tsbuildinfo

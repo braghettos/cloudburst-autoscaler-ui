@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudburst-ui
+  namespace: cloudburst-system
+  labels:
+    app.kubernetes.io/name: cloudburst-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudburst-ui
+  template:
+    metadata:
+      labels:
+        app: cloudburst-ui
+    spec:
+      serviceAccountName: cloudburst-ui
+      containers:
+      - name: ui
+        image: ghcr.io/braghettos/cloudburst-autoscaler-ui:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+          name: http
+        args:
+        - --addr=:8082
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi

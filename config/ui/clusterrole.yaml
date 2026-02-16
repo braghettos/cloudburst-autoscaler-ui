@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cloudburst-ui-role
+  labels:
+    app.kubernetes.io/name: cloudburst-ui
+rules:
+- apiGroups: [""]
+  resources: [pods, nodes]
+  verbs: [get, list]
+- apiGroups: [cloudburst.io]
+  resources: [nodeclaims, nodepools]
+  verbs: [get, list]
