@@ -10,6 +10,28 @@ export interface PodSummary {
   creationTimestamp: string
 }
 
+export interface InstanceDetailsSummary {
+  provider: string
+  region: string
+  instanceType: string
+  vcpu: number
+  ramGb: number
+  priceEurPerHour: number
+}
+
+export interface RecommendationRequestSummary {
+  minVcpu: number
+  minRamGb: number
+  regionConstraint?: string
+  maxPriceEurPerHour: number
+  arch?: string
+  allowedProviders?: string[]
+  dataSourceProvider?: string
+  dataSourceRegion?: string
+  estimatedEgressGbPerHour?: number
+  maxTCOEurPerHour?: number
+}
+
 export interface NodeClaimSummary {
   namespace: string
   name: string
@@ -23,6 +45,8 @@ export interface NodeClaimSummary {
   priceEurPerHour: number
   instanceID?: string
   nodeName?: string
+  recommendationRequest?: RecommendationRequestSummary
+  recommendationUsed?: InstanceDetailsSummary
   lastError?: string
   createdAt?: string
   readyAt?: string

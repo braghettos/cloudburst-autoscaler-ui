@@ -69,6 +69,70 @@ export function NodeClaimDetailPage() {
               <dd className="font-mono text-sm">{claim.instanceID}</dd>
             </>
           )}
+          {claim.recommendationRequest && (
+            <>
+              <dt className="text-gray-500 dark:text-gray-400 col-span-2 mt-2">CloudBroker Recommendation Request</dt>
+              <dd className="col-span-2">
+                <div className="mt-1 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 text-sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    <span className="text-gray-500 dark:text-gray-400">Min vCPU</span>
+                    <span>{claim.recommendationRequest.minVcpu}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Min RAM (GiB)</span>
+                    <span>{claim.recommendationRequest.minRamGb}</span>
+                    {claim.recommendationRequest.regionConstraint && (
+                      <>
+                        <span className="text-gray-500 dark:text-gray-400">Region Constraint</span>
+                        <span>{claim.recommendationRequest.regionConstraint}</span>
+                      </>
+                    )}
+                    <span className="text-gray-500 dark:text-gray-400">Max Price (€/h)</span>
+                    <span>€{claim.recommendationRequest.maxPriceEurPerHour?.toFixed(4) ?? '0'}/h</span>
+                    {claim.recommendationRequest.arch && (
+                      <>
+                        <span className="text-gray-500 dark:text-gray-400">Arch</span>
+                        <span>{claim.recommendationRequest.arch}</span>
+                      </>
+                    )}
+                    {claim.recommendationRequest.allowedProviders?.length ? (
+                      <>
+                        <span className="text-gray-500 dark:text-gray-400">Allowed Providers</span>
+                        <span>{claim.recommendationRequest.allowedProviders.join(', ')}</span>
+                      </>
+                    ) : null}
+                    {claim.recommendationRequest.dataSourceProvider && (
+                      <>
+                        <span className="text-gray-500 dark:text-gray-400">TCO Data Source</span>
+                        <span>{claim.recommendationRequest.dataSourceProvider}/{claim.recommendationRequest.dataSourceRegion ?? '-'}</span>
+                        <span className="text-gray-500 dark:text-gray-400">Max TCO (€/h)</span>
+                        <span>€{claim.recommendationRequest.maxTCOEurPerHour?.toFixed(4) ?? '-'}/h</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </dd>
+            </>
+          )}
+          {claim.recommendationUsed && (
+            <>
+              <dt className="text-gray-500 dark:text-gray-400 col-span-2 mt-2">CloudBroker Recommendation Used</dt>
+              <dd className="col-span-2">
+                <div className="mt-1 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 text-sm">
+                  <div className="grid grid-cols-2 gap-2">
+                    <span className="text-gray-500 dark:text-gray-400">Provider</span>
+                    <span>{claim.recommendationUsed.provider}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Region</span>
+                    <span>{claim.recommendationUsed.region}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Instance Type</span>
+                    <span>{claim.recommendationUsed.instanceType}</span>
+                    <span className="text-gray-500 dark:text-gray-400">vCPU / RAM</span>
+                    <span>{claim.recommendationUsed.vcpu} vCPU, {claim.recommendationUsed.ramGb} GiB</span>
+                    <span className="text-gray-500 dark:text-gray-400">Price</span>
+                    <span>€{claim.recommendationUsed.priceEurPerHour?.toFixed(4) ?? '0'}/h</span>
+                  </div>
+                </div>
+              </dd>
+            </>
+          )}
           {claim.lastError && (
             <>
               <dt className="text-gray-500 dark:text-gray-400">Error</dt>

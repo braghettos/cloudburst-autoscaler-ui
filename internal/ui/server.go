@@ -72,6 +72,8 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("GET /api/nodes/{name}", s.Handlers.getNode)
 	mux.HandleFunc("GET /api/nodes", s.Handlers.listNodes)
 	mux.HandleFunc("GET /api/dashboard", s.Handlers.dashboard)
+	mux.HandleFunc("GET /api/graph", s.Handlers.graphData)
+	mux.HandleFunc("GET /api/logs/controller", s.Handlers.getControllerLogs)
 
 	// Static file server for web UI (SPA: serve index.html for unknown paths)
 	if s.WebFS != nil {
@@ -110,6 +112,11 @@ func spafileServer(fsys fs.FS) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// Prevent caching of HTML/JS to avoid "Failed to fetch dynamically imported module"
+		// when chunks change after rebuild
+		if base := path.Base(urlPath); base == "index.html" || strings.HasSuffix(base, ".js") || strings.HasSuffix(base, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+		}
 		http.ServeContent(w, r, path.Base(urlPath), info.ModTime(), bytes.NewReader(content))
 	})
 }
@@ -124,6 +131,10 @@ func spafileServerDir(dir string) http.Handler {
 		fullPath := filepath.Join(dir, filepath.FromSlash(urlPath))
 		if _, err := fs.Stat(os.DirFS(dir), urlPath); err != nil {
 			fullPath = filepath.Join(dir, "index.html")
+		}
+		base := path.Base(urlPath)
+		if base == "index.html" || strings.HasSuffix(base, ".js") || strings.HasSuffix(base, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, must-revalidate")
 		}
 		http.ServeFile(w, r, fullPath)
 	})

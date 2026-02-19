@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -67,7 +68,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	handlers := &ui.Handlers{Client: c}
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		os.Stderr.WriteString("failed to create Kubernetes clientset: " + err.Error() + "\n")
+		os.Exit(1)
+	}
+
+	handlers := &ui.Handlers{Client: c, Clientset: clientset}
 	server := ui.NewServer(handlers, *addr, *webDir)
 
 	// Prefer -web-dir if provided and exists; otherwise use embedded files

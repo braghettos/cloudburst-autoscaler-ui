@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { LayoutDashboard, Layers, Cpu, Package, Server, GitBranch, RefreshCw, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, Layers, Cpu, Package, Server, GitBranch, ScrollText, RefreshCw, Sun, Moon } from 'lucide-react'
 import { useTheme } from '../theme/ThemeProvider'
 import { useDashboard } from '../api/hooks'
 
@@ -16,6 +16,7 @@ export function Layout() {
     { to: '/nodepools', label: 'Node Pools', icon: Package },
     { to: '/nodes', label: 'Nodes', icon: Server },
     { to: '/graph', label: 'Graph', icon: GitBranch },
+    { to: '/logs', label: 'Logs', icon: ScrollText },
   ]
 
   return (

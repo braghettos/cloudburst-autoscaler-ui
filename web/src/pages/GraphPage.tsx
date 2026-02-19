@@ -1,99 +1,372 @@
-import { useEffect, useRef, useState } from 'react'
-import mermaid from 'mermaid'
+import { useMemo, useState, useCallback, useEffect } from 'react'
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  Controls,
+  MiniMap,
+  Panel,
+  Position,
+  useReactFlow,
+  type Node,
+  type Edge,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import { Package, Cpu, Server, Layers, Maximize2, Filter } from 'lucide-react'
 import { useGraphData } from '../api/hooks'
+import { ResourceNode } from '../components/graph/ResourceNode'
+import type { NodeSummary, NodeClaimSummary, NodePoolSummary, PodSummary } from '../types/api'
 
-function mermaidId(s: string) {
-  return 'id' + String(s).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 50)
+const NODE_WIDTH = 200
+const NODE_HEIGHT = 56
+const COLUMN_GAP = 120
+const GROUP_GAP = 40
+const POD_GAP = 12
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nodeTypes: Record<string, any> = { resource: ResourceNode }
+
+function toId(prefix: string, s: string) {
+  return prefix + '_' + String(s).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)
 }
 
-function buildGraph(
-  pods: { namespace: string; name: string; nodeName?: string }[],
-  nodeclaims: { name: string; nodeName?: string; namespace: string; nodePoolRef: string }[],
-  nodepools: { namespace: string; name: string }[],
-  nodes: { name: string }[]
-): string {
-  const lines = ['flowchart TB']
-  const esc = (s: string) => String(s || '').replace(/[[\]"\n]/g, "'")
-  const npIds = nodepools.map((p) => ({
-    id: mermaidId('np_' + p.namespace + p.name),
-    label: p.namespace + '/' + p.name,
+function isCloudBurstNode(n: NodeSummary): boolean {
+  return n.cloudburstManaged === true || (n.name ?? '').startsWith('cb-')
+}
+
+function isCloudBurstNodeClaim(nc: NodeClaimSummary): boolean {
+  return (nc.name ?? '').startsWith('cb-')
+}
+
+function filterCloudBurstOnly(
+  pods: PodSummary[],
+  nodeclaims: NodeClaimSummary[],
+  nodepools: NodePoolSummary[],
+  nodes: NodeSummary[]
+): { pods: PodSummary[]; nodeclaims: NodeClaimSummary[]; nodepools: NodePoolSummary[]; nodes: NodeSummary[] } {
+  const cloudburstNodeNames = new Set(nodes.filter(isCloudBurstNode).map((n) => n.name))
+  const cloudburstNCs = nodeclaims.filter(isCloudBurstNodeClaim)
+  const npKeysFromNCs = new Set(cloudburstNCs.map((nc) => nc.namespace + '/' + nc.nodePoolRef))
+
+  // NodePools: include those referenced by CloudBurst NodeClaims (cb-*) or by NodeClaims with joined CB nodes
+  const npKeysFromCbNodes = new Set(
+    nodeclaims
+      .filter((nc) => nc.nodeName && cloudburstNodeNames.has(nc.nodeName))
+      .map((nc) => nc.namespace + '/' + nc.nodePoolRef)
+  )
+  const allNpKeys = new Set([...npKeysFromNCs, ...npKeysFromCbNodes])
+  const filteredNPs = nodepools.filter((np) => allNpKeys.has(np.namespace + '/' + np.name))
+
+  // NodeClaims: include cb-* (CloudBurst naming) or those with joined CB nodes
+  const filteredNCs = nodeclaims.filter(
+    (nc) =>
+      isCloudBurstNodeClaim(nc) ||
+      (nc.nodeName != null && cloudburstNodeNames.has(nc.nodeName))
+  )
+
+  const filteredPods = pods.filter((p) => p.nodeName && cloudburstNodeNames.has(p.nodeName))
+  const filteredNodes = nodes.filter(isCloudBurstNode)
+
+  return {
+    pods: filteredPods,
+    nodeclaims: filteredNCs,
+    nodepools: filteredNPs,
+    nodes: filteredNodes,
+  }
+}
+
+interface GraphResult {
+  nodes: Node[]
+  edges: Edge[]
+  podsByNode: Map<string, string[]>
+  ncToNode: Map<string, string>
+  npToNcs: Map<string, string[]>
+}
+
+function buildGraphData(
+  pods: PodSummary[],
+  nodeclaims: NodeClaimSummary[],
+  nodepools: NodePoolSummary[],
+  nodes: NodeSummary[]
+): GraphResult {
+  const nodesList: Node[] = []
+  const edgesList: Edge[] = []
+  const podsByNode = new Map<string, string[]>()
+  const ncToNode = new Map<string, string>()
+  const npToNcs = new Map<string, string[]>()
+
+  const npData = nodepools.map((p) => ({
+    id: toId('np', p.namespace + '/' + p.name),
+    label: `${p.namespace}/${p.name}`,
     key: p.namespace + '/' + p.name,
   }))
-  const ncIds = nodeclaims.map((nc) => ({
-    id: mermaidId('nc_' + nc.name),
+  const ncData = nodeclaims.map((nc) => ({
+    id: toId('nc', nc.name),
     label: nc.name,
     nodeName: nc.nodeName,
     poolKey: nc.namespace + '/' + nc.nodePoolRef,
   }))
-  const nodeIds = nodes.map((n) => ({ id: mermaidId('n_' + n.name), label: n.name }))
-  const podIds = pods.map((p) => ({
-    id: mermaidId('p_' + p.namespace + p.name),
-    label: p.namespace + '/' + p.name,
+  const nodeData = nodes.map((n) => ({
+    id: toId('n', n.name),
+    label: n.name,
+    cloudburstManaged: isCloudBurstNode(n),
+  }))
+  const podData = pods.map((p) => ({
+    id: toId('p', p.namespace + '/' + p.name),
+    label: `${p.namespace}/${p.name}`,
     nodeName: p.nodeName,
   }))
-  lines.push('  subgraph nodepools[Node Pools]')
-  npIds.forEach(({ id, label }) => lines.push('    ' + id + '["' + esc(label) + '"]'))
-  lines.push('  end')
-  lines.push('  subgraph nodeclaims[Node Claims]')
-  ncIds.forEach(({ id, label }) => lines.push('    ' + id + '["' + esc(label) + '"]'))
-  lines.push('  end')
-  lines.push('  subgraph nodes[Nodes]')
-  nodeIds.forEach(({ id, label }) => lines.push('    ' + id + '["' + esc(label) + '"]'))
-  lines.push('  end')
-  lines.push('  subgraph pods[Pods]')
-  podIds.forEach(({ id, label }) => lines.push('    ' + id + '["' + esc(label) + '"]'))
-  lines.push('  end')
-  ncIds.forEach((nc) => {
-    const pool = npIds.find((p) => p.key === nc.poolKey)
-    if (pool) lines.push('  ' + nc.id + ' --> ' + pool.id)
+
+  npData.forEach(({ id, label }) => {
+    nodesList.push({
+      id,
+      type: 'resource',
+      position: { x: 0, y: 0 },
+      data: { label, type: 'nodepool' },
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })
   })
-  ncIds.forEach((nc) => {
+  ncData.forEach(({ id, label }) => {
+    nodesList.push({
+      id,
+      type: 'resource',
+      position: { x: 0, y: 0 },
+      data: { label, type: 'nodeclaim' },
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })
+  })
+  nodeData.forEach(({ id, label, cloudburstManaged }) => {
+    nodesList.push({
+      id,
+      type: 'resource',
+      position: { x: 0, y: 0 },
+      data: { label, type: 'node', cloudburstManaged },
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })
+  })
+  podData.forEach(({ id, label }) => {
+    nodesList.push({
+      id,
+      type: 'resource',
+      position: { x: 0, y: 0 },
+      data: { label, type: 'pod' },
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+    })
+  })
+
+  // Edges: NP -> NC -> Node -> Pod
+  ncData.forEach((nc) => {
+    const pool = npData.find((p) => p.key === nc.poolKey)
+    if (pool) {
+      edgesList.push({ id: `${pool.id}-${nc.id}`, source: pool.id, target: nc.id })
+      const list = npToNcs.get(pool.id) ?? []
+      list.push(nc.id)
+      npToNcs.set(pool.id, list)
+    }
+  })
+  ncData.forEach((nc) => {
     if (!nc.nodeName) return
-    const node = nodeIds.find((n) => n.label === nc.nodeName)
-    if (node) lines.push('  ' + nc.id + ' <--> ' + node.id)
+    const n = nodeData.find((x) => x.label === nc.nodeName)
+    if (n) {
+      edgesList.push({ id: `${nc.id}-${n.id}`, source: nc.id, target: n.id })
+      ncToNode.set(nc.id, nc.nodeName)
+    }
   })
-  podIds.forEach((p) => {
+  podData.forEach((p) => {
     if (!p.nodeName) return
-    const node = nodeIds.find((n) => n.label === p.nodeName)
-    if (node) lines.push('  ' + p.id + ' --> ' + node.id)
+    const n = nodeData.find((x) => x.label === p.nodeName)
+    if (n) {
+      edgesList.push({ id: `${n.id}-${p.id}`, source: n.id, target: p.id })
+      const list = podsByNode.get(p.nodeName) ?? []
+      list.push(p.id)
+      podsByNode.set(p.nodeName, list)
+    }
   })
-  return lines.join('\n')
+
+  return { nodes: nodesList, edges: edgesList, podsByNode, ncToNode, npToNcs }
+}
+
+/**
+ * Relationship-aware column layout.
+ * Pods are grouped next to their parent node so each node+pods forms a
+ * horizontal swim-lane. NodeClaims align with their node, NodePools center
+ * across their NodeClaims.
+ */
+function getLayoutedElements(
+  nodes: Node[],
+  edges: Edge[],
+  podsByNode: Map<string, string[]>,
+  ncToNode: Map<string, string>,
+  npToNcs: Map<string, string[]>
+): { nodes: Node[]; edges: Edge[] } {
+  if (nodes.length === 0) return { nodes: [], edges: [] }
+
+  const COL_NP = 0
+  const COL_NC = 1
+  const COL_NODE = 2
+  const COL_POD = 3
+
+  const colX = (col: number) => col * (NODE_WIDTH + COLUMN_GAP)
+
+  const byId = new Map<string, Node>()
+  const byType: Record<string, Node[]> = { nodepool: [], nodeclaim: [], node: [], pod: [] }
+  nodes.forEach((n) => {
+    byId.set(n.id, n)
+    const t = (n.data?.type as string) ?? 'pod'
+    if (t in byType) byType[t].push(n)
+    else byType.pod.push(n)
+  })
+
+  const positioned = new Map<string, { x: number; y: number }>()
+  let cursorY = 0
+
+  const k8sNodes = byType.node
+  const podNodeById = new Map<string, Node>()
+  byType.pod.forEach((p) => podNodeById.set(p.id, p))
+  const placedPods = new Set<string>()
+
+  k8sNodes.forEach((kNode) => {
+    const nodeName = String(kNode.data?.label ?? '')
+    const podIds = podsByNode.get(nodeName) ?? []
+    const groupPodCount = podIds.length
+    const nodeSlotH = NODE_HEIGHT
+    const podsSlotH = groupPodCount > 0 ? groupPodCount * NODE_HEIGHT + (groupPodCount - 1) * POD_GAP : NODE_HEIGHT
+    const groupH = Math.max(nodeSlotH, podsSlotH)
+
+    positioned.set(kNode.id, {
+      x: colX(COL_NODE),
+      y: cursorY + (groupH - NODE_HEIGHT) / 2,
+    })
+
+    podIds.forEach((podId, i) => {
+      positioned.set(podId, {
+        x: colX(COL_POD),
+        y: cursorY + i * (NODE_HEIGHT + POD_GAP),
+      })
+      placedPods.add(podId)
+    })
+
+    cursorY += groupH + GROUP_GAP
+  })
+
+  const unplacedPods = byType.pod.filter((p) => !placedPods.has(p.id))
+  if (unplacedPods.length > 0) {
+    unplacedPods.forEach((p) => {
+      positioned.set(p.id, { x: colX(COL_POD), y: cursorY })
+      cursorY += NODE_HEIGHT + POD_GAP
+    })
+    cursorY += GROUP_GAP - POD_GAP
+  }
+
+  const nodeYById = new Map<string, number>()
+  k8sNodes.forEach((kNode) => {
+    const pos = positioned.get(kNode.id)
+    if (pos) nodeYById.set(String(kNode.data?.label ?? ''), pos.y)
+  })
+
+  const placedNCs = new Set<string>()
+  let ncOrphanY = cursorY
+  byType.nodeclaim.forEach((nc) => {
+    const linkedNodeName = ncToNode.get(nc.id)
+    if (linkedNodeName && nodeYById.has(linkedNodeName)) {
+      positioned.set(nc.id, { x: colX(COL_NC), y: nodeYById.get(linkedNodeName)! })
+      placedNCs.add(nc.id)
+    }
+  })
+  byType.nodeclaim.forEach((nc) => {
+    if (!placedNCs.has(nc.id)) {
+      const lastNodeY = k8sNodes.length > 0 ? Math.max(...[...nodeYById.values()]) + NODE_HEIGHT + GROUP_GAP : 0
+      const y = Math.max(ncOrphanY, lastNodeY)
+      positioned.set(nc.id, { x: colX(COL_NC), y })
+      ncOrphanY = y + NODE_HEIGHT + GROUP_GAP
+    }
+  })
+
+  const ncYById = new Map<string, number>()
+  byType.nodeclaim.forEach((nc) => {
+    const pos = positioned.get(nc.id)
+    if (pos) ncYById.set(nc.id, pos.y)
+  })
+
+  byType.nodepool.forEach((np) => {
+    const ncIds = npToNcs.get(np.id) ?? []
+    const linkedYs = ncIds.map((id) => ncYById.get(id)).filter((y): y is number => y !== undefined)
+    if (linkedYs.length > 0) {
+      const minY = Math.min(...linkedYs)
+      const maxY = Math.max(...linkedYs)
+      positioned.set(np.id, { x: colX(COL_NP), y: (minY + maxY) / 2 })
+    } else {
+      positioned.set(np.id, { x: colX(COL_NP), y: 0 })
+    }
+  })
+
+  const layoutedNodes = nodes.map((n): Node => {
+    const pos = positioned.get(n.id) ?? { x: 0, y: 0 }
+    return {
+      ...n,
+      position: pos,
+      targetPosition: Position.Left,
+      sourcePosition: Position.Right,
+    }
+  })
+
+  return { nodes: layoutedNodes, edges }
+}
+
+function FitViewButton() {
+  const { fitView } = useReactFlow()
+  const handleClick = useCallback(() => {
+    fitView({ padding: 0.2, duration: 300 })
+  }, [fitView])
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-white/90 dark:bg-gray-800/90 shadow text-xs font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+      title="Fit to view"
+    >
+      <Maximize2 className="w-3.5 h-3.5" />
+      Fit
+    </button>
+  )
+}
+
+function FitViewOnFilterChange({ cloudburstOnly }: { cloudburstOnly: boolean }) {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    const id = setTimeout(() => fitView({ padding: 0.25, duration: 300 }), 50)
+    return () => clearTimeout(id)
+  }, [cloudburstOnly, fitView])
+  return null
 }
 
 export function GraphPage() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [cloudburstOnly, setCloudburstOnly] = useState(true)
   const { pods, nodeclaims, nodepools, nodes, isLoading, isError, error: fetchError } = useGraphData()
 
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: 'base',
-      themeVariables: {
-        primaryColor: '#cfe2ff',
-        primaryTextColor: '#084298',
-        primaryBorderColor: '#084298',
-        lineColor: '#666',
-        secondaryColor: '#d1e7dd',
-        tertiaryColor: '#f8f9fa',
-      },
-    })
-  }, [])
+  const filtered = useMemo(() => {
+    if (cloudburstOnly) {
+      return filterCloudBurstOnly(pods, nodeclaims, nodepools, nodes)
+    }
+    return { pods, nodeclaims, nodepools, nodes }
+  }, [cloudburstOnly, pods, nodeclaims, nodepools, nodes])
 
-  useEffect(() => {
-    if (isLoading || isError || (!pods.length && !nodeclaims.length && !nodepools.length && !nodes.length)) return
-    if (!containerRef.current) return
+  const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {
+    const { pods: p, nodeclaims: nc, nodepools: np, nodes: n } = filtered
+    if (!p.length && !nc.length && !np.length && !n.length) {
+      return { nodes: [] as Node[], edges: [] as Edge[] }
+    }
+    const { nodes: rawNodes, edges: rawEdges, podsByNode, ncToNode, npToNcs } = buildGraphData(p, nc, np, n)
+    return getLayoutedElements(rawNodes, rawEdges, podsByNode, ncToNode, npToNcs)
+  }, [filtered])
 
-    const chart = buildGraph(pods, nodeclaims, nodepools, nodes)
-    const id = 'mermaid-graph-' + Date.now()
-    setError(null)
-    mermaid
-      .render(id, chart)
-      .then(({ svg }) => {
-        if (containerRef.current) containerRef.current.innerHTML = svg
-      })
-      .catch((err) => setError(err.message))
-  }, [pods, nodeclaims, nodepools, nodes, isLoading, isError])
+  const hasCloudBurstResources = useMemo(() => {
+    return nodes.some(isCloudBurstNode)
+  }, [nodes])
 
   if (isLoading) {
     return <div className="animate-pulse h-96 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -105,22 +378,196 @@ export function GraphPage() {
       </div>
     )
   }
-  if (!pods.length && !nodeclaims.length && !nodepools.length && !nodes.length) {
+
+  const isEmpty = !filtered.pods.length && !filtered.nodeclaims.length && !filtered.nodepools.length && !filtered.nodes.length
+
+  if (isEmpty && cloudburstOnly && !hasCloudBurstResources) {
     return (
-      <div className="text-center py-12 text-gray-500 dark:text-gray-400">No resources to display</div>
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 className="text-lg font-semibold">Resource Graph</h2>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <span
+              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
+                cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
+                  cloudburstOnly ? 'left-5' : 'left-0.5'
+                }`}
+              />
+              <input
+                type="checkbox"
+                checked={cloudburstOnly}
+                onChange={(e) => setCloudburstOnly(e.target.checked)}
+                className="sr-only"
+              />
+            </span>
+            <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
+          </label>
+        </div>
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          <p className="mb-2 font-medium">No CloudBurst resources yet.</p>
+          <p className="text-sm">
+            Create a NodePool and trigger a pending pod to see autoscaling. Ensure the UI is connected to the correct cluster (kubeconfig).
+          </p>
+        </div>
+      </div>
     )
   }
 
+  if (isEmpty) {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 className="text-lg font-semibold">Resource Graph</h2>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <span
+              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
+                cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
+                  cloudburstOnly ? 'left-5' : 'left-0.5'
+                }`}
+              />
+              <input
+                type="checkbox"
+                checked={cloudburstOnly}
+                onChange={(e) => setCloudburstOnly(e.target.checked)}
+                className="sr-only"
+              />
+            </span>
+            <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
+          </label>
+        </div>
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+          <p className="mb-2">No resources to display.</p>
+          <p className="text-sm">
+            Create a NodePool and trigger a pending pod to see the autoscaling graph. Ensure the UI is connected to the correct cluster (kubeconfig).
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const stats = [
+    { label: 'NodePools', value: filtered.nodepools.length, icon: Package },
+    { label: 'NodeClaims', value: filtered.nodeclaims.length, icon: Cpu },
+    { label: 'Nodes', value: filtered.nodes.length, icon: Server },
+    { label: 'Pods', value: filtered.pods.length, icon: Layers },
+  ]
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Resource Graph: Pods — Nodes — NodeClaims — NodePools</h2>
-      <div
-        ref={containerRef}
-        className="min-h-[400px] bg-gray-50 dark:bg-gray-800 rounded-lg p-4 overflow-auto"
-      />
-      {error && (
-        <div className="text-red-600 dark:text-red-400 text-sm">Graph error: {error}</div>
-      )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h2 className="text-lg font-semibold">Resource Graph</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <span
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
+                  cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
+                    cloudburstOnly ? 'left-5' : 'left-0.5'
+                  }`}
+                />
+                <input
+                  type="checkbox"
+                  checked={cloudburstOnly}
+                  onChange={(e) => setCloudburstOnly(e.target.checked)}
+                  className="sr-only"
+                />
+              </span>
+              <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
+            </label>
+          </div>
+          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+            {stats.map(({ label, value, icon: Icon }) => (
+              <span key={label} className="flex items-center gap-1.5">
+                <Icon className="w-3.5 h-3.5" />
+                <span className="font-medium">{value}</span>
+                <span>{label}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3 text-xs">
+        <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-300">
+          <Package className="w-3.5 h-3.5" />
+          NodePool
+        </span>
+        <span className="flex items-center gap-1.5 text-green-700 dark:text-green-300">
+          <Cpu className="w-3.5 h-3.5" />
+          NodeClaim
+        </span>
+        <span className="flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
+          <Server className="w-3.5 h-3.5" />
+          Node
+        </span>
+        <span className="flex items-center gap-1.5 text-amber-700 dark:text-amber-300">
+          <Layers className="w-3.5 h-3.5" />
+          Pod
+        </span>
+      </div>
+
+      <div className="w-full h-[600px] rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-950 shadow-sm">
+        <ReactFlowProvider>
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={nodeTypes}
+            defaultEdgeOptions={{ type: 'smoothstep' }}
+            fitView
+            fitViewOptions={{ padding: 0.25 }}
+            minZoom={0.1}
+            maxZoom={2}
+            proOptions={{ hideAttribution: true }}
+            onInit={(instance) => {
+              requestAnimationFrame(() => instance?.fitView?.({ padding: 0.25 }))
+            }}
+          >
+            <Background
+              color="rgb(156 163 175)"
+              className="bg-gray-50 dark:bg-gray-950"
+              gap={16}
+              size={1}
+            />
+            <Controls
+              className="!bg-white/90 dark:!bg-gray-800/90 !border-gray-200 dark:!border-gray-700 !rounded-md"
+              showInteractive={false}
+            />
+            <MiniMap
+              nodeColor={(node) => {
+                const t = (node.data?.type as string) || 'pod'
+                const colors: Record<string, string> = {
+                  nodepool: '#3b82f6',
+                  nodeclaim: '#22c55e',
+                  node: '#a855f7',
+                  pod: '#f59e0b',
+                }
+                return colors[t] ?? '#94a3b8'
+              }}
+              className="!bg-white/90 dark:!bg-gray-800/90 !rounded-md"
+            />
+            <FitViewOnFilterChange cloudburstOnly={cloudburstOnly} />
+            <Panel position="top-left" className="flex gap-2">
+              <div className="bg-white/95 dark:bg-gray-800/95 rounded-md px-2.5 py-1.5 shadow text-xs font-medium text-gray-600 dark:text-gray-300">
+                NodePool → NodeClaim → Node → Pod
+              </div>
+              <FitViewButton />
+            </Panel>
+          </ReactFlow>
+        </ReactFlowProvider>
+      </div>
     </div>
   )
 }

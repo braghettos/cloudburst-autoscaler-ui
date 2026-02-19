@@ -69,23 +69,28 @@ export function useNode(name: string | undefined) {
   })
 }
 
+export function useControllerLogs(tail?: number) {
+  return useQuery({
+    queryKey: ['controllerLogs', tail],
+    queryFn: () => api.controllerLogs({ tail }),
+    refetchInterval: 5000,
+  })
+}
+
 export function useGraphData() {
-  const [pods, nodeclaims, nodepools, nodes] = [
-    usePods(),
-    useNodeClaims(),
-    useNodePools(),
-    useNodes(),
-  ]
-  const isLoading = pods.isLoading || nodeclaims.isLoading || nodepools.isLoading || nodes.isLoading
-  const isError = pods.isError || nodeclaims.isError || nodepools.isError || nodes.isError
-  const error = pods.error || nodeclaims.error || nodepools.error || nodes.error
+  const query = useQuery({
+    queryKey: ['graph'],
+    queryFn: api.graph,
+    refetchInterval: 5000, // refresh every 5s during E2E
+  })
+  const data = query.data
   return {
-    pods: pods.data ?? [],
-    nodeclaims: nodeclaims.data ?? [],
-    nodepools: nodepools.data ?? [],
-    nodes: nodes.data ?? [],
-    isLoading,
-    isError,
-    error,
+    pods: data?.pods ?? [],
+    nodeclaims: data?.nodeclaims ?? [],
+    nodepools: data?.nodepools ?? [],
+    nodes: data?.nodes ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
   }
 }

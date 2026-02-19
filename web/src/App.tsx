@@ -10,6 +10,7 @@ import { NodePoolDetailPage } from './pages/NodePoolDetailPage'
 import { NodesPage } from './pages/NodesPage'
 import { NodeDetailPage } from './pages/NodeDetailPage'
 import { GraphPage } from './pages/GraphPage'
+import { LogsPage } from './pages/LogsPage'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="nodes" element={<NodesPage />} />
         <Route path="nodes/:name" element={<NodeDetailPage />} />
         <Route path="graph" element={<GraphPage />} />
+        <Route path="logs" element={<LogsPage />} />
       </Route>
     </Routes>
   )

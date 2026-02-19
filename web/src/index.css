@@ -12,6 +12,7 @@
     --color-foreground: theme('colors.gray.100');
   }
   body {
+    font-family: 'DM Sans', system-ui, sans-serif;
     @apply bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
   }
 }

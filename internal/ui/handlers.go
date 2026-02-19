@@ -19,22 +19,31 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 )
+
+// ControllerLogsNamespace is the namespace where the CloudBurst controller runs.
+const ControllerLogsNamespace = "cloudburst-system"
+
+// ControllerLogsLabelSelector selects the CloudBurst controller pods.
+const ControllerLogsLabelSelector = "app=cloudburst-controller"
 
 // Handlers provides HTTP handlers for the CloudBurst UI API.
 type Handlers struct {
-	Client client.Client
+	Client    client.Client
+	Clientset kubernetes.Interface
 }
 
 // PodSummary represents a simplified pod for the UI.
@@ -50,25 +59,51 @@ type PodSummary struct {
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
 }
 
+// InstanceDetailsSummary is the CloudBroker recommendation used for provisioning (from NodeClaim status).
+type InstanceDetailsSummary struct {
+	Provider        string  `json:"provider"`
+	Region          string  `json:"region"`
+	InstanceType    string  `json:"instanceType"`
+	VCPU            int32   `json:"vcpu"`
+	RamGb           float64 `json:"ramGb"`
+	PriceEurPerHour float64 `json:"priceEurPerHour"`
+}
+
+// RecommendationRequestSummary is the CloudBroker request that led to this NodeClaim.
+type RecommendationRequestSummary struct {
+	MinVCPU                  int32    `json:"minVcpu"`
+	MinRAMGb                 float64  `json:"minRamGb"`
+	RegionConstraint         string   `json:"regionConstraint,omitempty"`
+	MaxPriceEurPerHour       float64  `json:"maxPriceEurPerHour"`
+	Arch                     string   `json:"arch,omitempty"`
+	AllowedProviders         []string `json:"allowedProviders,omitempty"`
+	DataSourceProvider       string   `json:"dataSourceProvider,omitempty"`
+	DataSourceRegion         string   `json:"dataSourceRegion,omitempty"`
+	EstimatedEgressGbPerHour float64  `json:"estimatedEgressGbPerHour,omitempty"`
+	MaxTCOEurPerHour         float64  `json:"maxTCOEurPerHour,omitempty"`
+}
+
 // NodeClaimSummary represents a NodeClaim for the UI.
 type NodeClaimSummary struct {
-	Namespace         string   `json:"namespace"`
-	Name              string   `json:"name"`
-	Phase             string   `json:"phase"`
-	NodePoolRef       string   `json:"nodePoolRef"`
-	Provider          string   `json:"provider"`
-	Region            string   `json:"region"`
-	InstanceType      string   `json:"instanceType"`
-	VCPU              int32    `json:"vcpu"`
-	RamGb             float64  `json:"ramGb"`
-	PriceEurPerHour   float64  `json:"priceEurPerHour"`
-	InstanceID        string   `json:"instanceID,omitempty"`
-	NodeName          string   `json:"nodeName,omitempty"`
-	LastError         string   `json:"lastError,omitempty"`
-	CreatedAt         string   `json:"createdAt,omitempty"`
-	ReadyAt           string   `json:"readyAt,omitempty"`
-	LastTransition    string   `json:"lastTransition,omitempty"`
-	CreationTimestamp metav1.Time `json:"creationTimestamp"`
+	Namespace              string                        `json:"namespace"`
+	Name                   string                        `json:"name"`
+	Phase                  string                        `json:"phase"`
+	NodePoolRef            string                        `json:"nodePoolRef"`
+	Provider               string                        `json:"provider"`
+	Region                 string                        `json:"region"`
+	InstanceType           string                        `json:"instanceType"`
+	VCPU                   int32                         `json:"vcpu"`
+	RamGb                  float64                       `json:"ramGb"`
+	PriceEurPerHour        float64                       `json:"priceEurPerHour"`
+	InstanceID             string                        `json:"instanceID,omitempty"`
+	NodeName               string                        `json:"nodeName,omitempty"`
+	RecommendationRequest  *RecommendationRequestSummary `json:"recommendationRequest,omitempty"`
+	RecommendationUsed     *InstanceDetailsSummary       `json:"recommendationUsed,omitempty"`
+	LastError              string                        `json:"lastError,omitempty"`
+	CreatedAt              string                        `json:"createdAt,omitempty"`
+	ReadyAt                string                        `json:"readyAt,omitempty"`
+	LastTransition         string                        `json:"lastTransition,omitempty"`
+	CreationTimestamp      metav1.Time                   `json:"creationTimestamp"`
 }
 
 // NodePoolSummary represents a NodePool for the UI.
@@ -88,6 +123,27 @@ type NodeSummary struct {
 	CloudBurstManaged bool   `json:"cloudburstManaged"`
 	Ready            bool   `json:"ready"`
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
+}
+
+func recommendationRequestFromCR(r *cloudburstv1alpha1.RecommendationRequestSummary) *RecommendationRequestSummary {
+	if r == nil {
+		return nil
+	}
+	out := &RecommendationRequestSummary{
+		MinVCPU:            r.MinVCPU,
+		MinRAMGb:           r.MinRAMGb,
+		RegionConstraint:   r.RegionConstraint,
+		MaxPriceEurPerHour: r.MaxPriceEurPerHour,
+		Arch:               r.Arch,
+		DataSourceProvider: r.DataSourceProvider,
+		DataSourceRegion:   r.DataSourceRegion,
+		EstimatedEgressGbPerHour: r.EstimatedEgressGbPerHour,
+		MaxTCOEurPerHour:   r.MaxTCOEurPerHour,
+	}
+	if len(r.AllowedProviders) > 0 {
+		out.AllowedProviders = append([]string{}, r.AllowedProviders...)
+	}
+	return out
 }
 
 // DashboardStats holds aggregated counts for the dashboard.
@@ -264,24 +320,42 @@ func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
 			lastTransition = c.Status.Timestamps.LastTransition.Format(time.RFC3339)
 		}
 
+		var recUsed *InstanceDetailsSummary
+		if c.Status.RecommendationUsed != nil {
+			recUsed = &InstanceDetailsSummary{
+				Provider:        c.Status.RecommendationUsed.Provider,
+				Region:          c.Status.RecommendationUsed.Region,
+				InstanceType:    c.Status.RecommendationUsed.InstanceType,
+				VCPU:            c.Status.RecommendationUsed.VCPU,
+				RamGb:           c.Status.RecommendationUsed.RamGb,
+				PriceEurPerHour: c.Status.RecommendationUsed.PriceEurPerHour,
+			}
+		}
+		var recReq *RecommendationRequestSummary
+		if c.Status.RecommendationRequest != nil {
+			recReq = recommendationRequestFromCR(c.Status.RecommendationRequest)
+		}
+
 		result = append(result, NodeClaimSummary{
-			Namespace:         c.Namespace,
-			Name:              c.Name,
-			Phase:             string(c.Status.Phase),
-			NodePoolRef:       c.Spec.NodePoolRef,
-			Provider:          provider,
-			Region:            region,
-			InstanceType:      instanceType,
-			VCPU:              vcpu,
-			RamGb:             ramGb,
-			PriceEurPerHour:   priceEur,
-			InstanceID:        c.Status.InstanceID,
-			NodeName:          c.Status.NodeName,
-			LastError:         c.Status.LastError,
-			CreatedAt:         createdAt,
-			ReadyAt:           readyAt,
-			LastTransition:    lastTransition,
-			CreationTimestamp: c.CreationTimestamp,
+			Namespace:              c.Namespace,
+			Name:                   c.Name,
+			Phase:                  string(c.Status.Phase),
+			NodePoolRef:            c.Spec.NodePoolRef,
+			Provider:               provider,
+			Region:                 region,
+			InstanceType:           instanceType,
+			VCPU:                   vcpu,
+			RamGb:                  ramGb,
+			PriceEurPerHour:        priceEur,
+			InstanceID:             c.Status.InstanceID,
+			NodeName:               c.Status.NodeName,
+			RecommendationRequest:  recReq,
+			RecommendationUsed:     recUsed,
+			LastError:              c.Status.LastError,
+			CreatedAt:              createdAt,
+			ReadyAt:               readyAt,
+			LastTransition:         lastTransition,
+			CreationTimestamp:      c.CreationTimestamp,
 		})
 	}
 
@@ -332,24 +406,41 @@ func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
 	if c.Status.Timestamps.LastTransition.Unix() > 0 {
 		lastTransition = c.Status.Timestamps.LastTransition.Format(time.RFC3339)
 	}
+	var recUsed *InstanceDetailsSummary
+	if c.Status.RecommendationUsed != nil {
+		recUsed = &InstanceDetailsSummary{
+			Provider:        c.Status.RecommendationUsed.Provider,
+			Region:          c.Status.RecommendationUsed.Region,
+			InstanceType:    c.Status.RecommendationUsed.InstanceType,
+			VCPU:            c.Status.RecommendationUsed.VCPU,
+			RamGb:           c.Status.RecommendationUsed.RamGb,
+			PriceEurPerHour: c.Status.RecommendationUsed.PriceEurPerHour,
+		}
+	}
+	var recReq *RecommendationRequestSummary
+	if c.Status.RecommendationRequest != nil {
+		recReq = recommendationRequestFromCR(c.Status.RecommendationRequest)
+	}
 	result := NodeClaimSummary{
-		Namespace:         c.Namespace,
-		Name:              c.Name,
-		Phase:             string(c.Status.Phase),
-		NodePoolRef:       c.Spec.NodePoolRef,
-		Provider:          provider,
-		Region:            region,
-		InstanceType:      instanceType,
-		VCPU:              vcpu,
-		RamGb:             ramGb,
-		PriceEurPerHour:   priceEur,
-		InstanceID:        c.Status.InstanceID,
-		NodeName:          c.Status.NodeName,
-		LastError:         c.Status.LastError,
-		CreatedAt:         createdAt,
-		ReadyAt:           readyAt,
-		LastTransition:    lastTransition,
-		CreationTimestamp: c.CreationTimestamp,
+		Namespace:              c.Namespace,
+		Name:                   c.Name,
+		Phase:                  string(c.Status.Phase),
+		NodePoolRef:            c.Spec.NodePoolRef,
+		Provider:               provider,
+		Region:                 region,
+		InstanceType:           instanceType,
+		VCPU:                   vcpu,
+		RamGb:                  ramGb,
+		PriceEurPerHour:        priceEur,
+		InstanceID:             c.Status.InstanceID,
+		NodeName:               c.Status.NodeName,
+		RecommendationRequest:  recReq,
+		RecommendationUsed:     recUsed,
+		LastError:              c.Status.LastError,
+		CreatedAt:              createdAt,
+		ReadyAt:               readyAt,
+		LastTransition:        lastTransition,
+		CreationTimestamp:     c.CreationTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
@@ -469,23 +560,211 @@ func (h *Handlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+// GraphDataResponse holds all resources needed for the graph in one response.
+type GraphDataResponse struct {
+	Pods      []PodSummary      `json:"pods"`
+	NodeClaims []NodeClaimSummary `json:"nodeclaims"`
+	NodePools  []NodePoolSummary  `json:"nodepools"`
+	Nodes     []NodeSummary     `json:"nodes"`
+}
+
+func (h *Handlers) graphData(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	listOpts := []client.ListOption{client.InNamespace(metav1.NamespaceAll)}
+
+	var pods corev1.PodList
+	if err := h.Client.List(ctx, &pods, listOpts...); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var claims cloudburstv1alpha1.NodeClaimList
+	if err := h.Client.List(ctx, &claims, listOpts...); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var pools cloudburstv1alpha1.NodePoolList
+	if err := h.Client.List(ctx, &pools, listOpts...); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var nodes corev1.NodeList
+	if err := h.Client.List(ctx, &nodes); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := GraphDataResponse{
+		Pods:       listPodsToSummary(pods.Items, "", ""),
+		NodeClaims: listNodeClaimsToSummary(claims.Items, "", ""),
+		NodePools:  listNodePoolsToSummary(pools.Items, claims.Items),
+		Nodes:      listNodesToSummary(nodes.Items),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func listPodsToSummary(items []corev1.Pod, filterNS, filterPhase string) []PodSummary {
+	result := make([]PodSummary, 0, len(items))
+	for _, p := range items {
+		if filterNS != "" && p.Namespace != filterNS {
+			continue
+		}
+		if filterPhase != "" && string(p.Status.Phase) != filterPhase {
+			continue
+		}
+		var cpuTotal, memTotal resource.Quantity
+		for _, c := range p.Spec.Containers {
+			if c.Resources.Requests != nil {
+				if q, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+					cpuTotal.Add(q)
+				}
+				if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+					memTotal.Add(q)
+				}
+			}
+		}
+		unschedulable := false
+		unschedulableMsg := ""
+		for _, cond := range p.Status.Conditions {
+			if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse && cond.Reason == "Unschedulable" {
+				unschedulable = true
+				unschedulableMsg = cond.Message
+				break
+			}
+		}
+		result = append(result, PodSummary{
+			Namespace:         p.Namespace,
+			Name:              p.Name,
+			Phase:             string(p.Status.Phase),
+			NodeName:          p.Spec.NodeName,
+			CPURequest:        cpuTotal.String(),
+			MemoryRequest:     memTotal.String(),
+			Unschedulable:     unschedulable,
+			UnschedulableMsg:  unschedulableMsg,
+			CreationTimestamp: p.CreationTimestamp,
+		})
+	}
+	return result
+}
+
+func listNodeClaimsToSummary(items []cloudburstv1alpha1.NodeClaim, filterNS, filterPhase string) []NodeClaimSummary {
+	result := make([]NodeClaimSummary, 0, len(items))
+	for _, c := range items {
+		if filterNS != "" && c.Namespace != filterNS {
+			continue
+		}
+		if filterPhase != "" && string(c.Status.Phase) != filterPhase {
+			continue
+		}
+		provider, region, instanceType := "", "", ""
+		vcpu, ramGb, priceEur := int32(0), 0.0, 0.0
+		if c.Spec.Chosen.Provider != "" {
+			provider = c.Spec.Chosen.Provider
+			region = c.Spec.Chosen.Region
+			instanceType = c.Spec.Chosen.InstanceType
+			vcpu = c.Spec.Chosen.VCPU
+			ramGb = c.Spec.Chosen.RamGb
+			priceEur = c.Spec.Chosen.PriceEurPerHour
+		}
+		createdAt, readyAt, lastTransition := "", "", ""
+		if c.Status.Timestamps.CreatedAt.Unix() > 0 {
+			createdAt = c.Status.Timestamps.CreatedAt.Format(time.RFC3339)
+		}
+		if c.Status.Timestamps.ReadyAt != nil && c.Status.Timestamps.ReadyAt.Unix() > 0 {
+			readyAt = c.Status.Timestamps.ReadyAt.Format(time.RFC3339)
+		}
+		if c.Status.Timestamps.LastTransition.Unix() > 0 {
+			lastTransition = c.Status.Timestamps.LastTransition.Format(time.RFC3339)
+		}
+		result = append(result, NodeClaimSummary{
+			Namespace:         c.Namespace,
+			Name:              c.Name,
+			Phase:             string(c.Status.Phase),
+			NodePoolRef:       c.Spec.NodePoolRef,
+			Provider:          provider,
+			Region:            region,
+			InstanceType:      instanceType,
+			VCPU:              vcpu,
+			RamGb:             ramGb,
+			PriceEurPerHour:   priceEur,
+			InstanceID:        c.Status.InstanceID,
+			NodeName:          c.Status.NodeName,
+			LastError:         c.Status.LastError,
+			CreatedAt:         createdAt,
+			ReadyAt:           readyAt,
+			LastTransition:    lastTransition,
+			CreationTimestamp: c.CreationTimestamp,
+		})
+	}
+	return result
+}
+
+func listNodePoolsToSummary(pools []cloudburstv1alpha1.NodePool, claims []cloudburstv1alpha1.NodeClaim) []NodePoolSummary {
+	claimCountByPool := make(map[string]int)
+	for _, c := range claims {
+		claimCountByPool[c.Namespace+"/"+c.Spec.NodePoolRef]++
+	}
+	result := make([]NodePoolSummary, 0, len(pools))
+	for _, p := range pools {
+		key := p.Namespace + "/" + p.Name
+		count := claimCountByPool[key]
+		minNodes := int32(1)
+		if p.Spec.Limits.MinNodes != nil {
+			minNodes = *p.Spec.Limits.MinNodes
+		}
+		result = append(result, NodePoolSummary{
+			Namespace:         p.Namespace,
+			Name:              p.Name,
+			RegionConstraint:  p.Spec.Requirements.RegionConstraint,
+			MaxNodes:          p.Spec.Limits.MaxNodes,
+			MinNodes:          minNodes,
+			NodeClaimCount:    count,
+			CreationTimestamp: p.CreationTimestamp,
+		})
+	}
+	return result
+}
+
+func listNodesToSummary(items []corev1.Node) []NodeSummary {
+	result := make([]NodeSummary, 0, len(items))
+	for _, n := range items {
+		ready := false
+		for _, c := range n.Status.Conditions {
+			if c.Type == corev1.NodeReady && c.Status == corev1.ConditionTrue {
+				ready = true
+				break
+			}
+		}
+		result = append(result, NodeSummary{
+			Name:              n.Name,
+			CloudBurstManaged: strings.HasPrefix(n.Name, "cb-"),
+			Ready:             ready,
+			CreationTimestamp: n.CreationTimestamp,
+		})
+	}
+	return result
+}
+
 func (h *Handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	listOpts := []client.ListOption{client.InNamespace(metav1.NamespaceAll)}
+
 	var pods corev1.PodList
-	if err := h.Client.List(ctx, &pods); err != nil {
+	if err := h.Client.List(ctx, &pods, listOpts...); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var claims cloudburstv1alpha1.NodeClaimList
-	if err := h.Client.List(ctx, &claims); err != nil {
+	if err := h.Client.List(ctx, &claims, listOpts...); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var pools cloudburstv1alpha1.NodePoolList
-	if err := h.Client.List(ctx, &pools); err != nil {
+	if err := h.Client.List(ctx, &pools, listOpts...); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -573,4 +852,75 @@ func (h *Handlers) getNode(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// ControllerLogsResponse is the API response for controller logs.
+type ControllerLogsResponse struct {
+	Logs   string `json:"logs"`
+	Pod    string `json:"pod,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
+func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
+	if h.Clientset == nil {
+		http.Error(w, "logs not available: Kubernetes clientset not configured", http.StatusServiceUnavailable)
+		return
+	}
+	ctx := r.Context()
+
+	tailLines := int64(500)
+	if s := r.URL.Query().Get("tail"); s != "" {
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil && n > 0 && n <= 10000 {
+			tailLines = n
+		}
+	}
+
+	podList, err := h.Clientset.CoreV1().Pods(ControllerLogsNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: ControllerLogsLabelSelector,
+	})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error()})
+		return
+	}
+	if len(podList.Items) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ControllerLogsResponse{
+			Logs:  "",
+			Error: "no CloudBurst controller pods found in " + ControllerLogsNamespace,
+		})
+		return
+	}
+
+	pod := &podList.Items[0]
+	req := h.Clientset.CoreV1().Pods(ControllerLogsNamespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+		TailLines: &tailLines,
+	})
+	logStream, err := req.Stream(ctx)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error(), Pod: pod.Name})
+		return
+	}
+	defer logStream.Close()
+
+	var buf strings.Builder
+	b := make([]byte, 4096)
+	for {
+		n, err := logStream.Read(b)
+		if n > 0 {
+			buf.Write(b[:n])
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ControllerLogsResponse{
+		Logs: buf.String(),
+		Pod:  pod.Name,
+	})
 }
