@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -15,6 +19,7 @@ env:
   NODE_VERSION: "20"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  AUTOSCALER_REPO: ${{ vars.AUTOSCALER_REPO != '' && vars.AUTOSCALER_REPO || format('{0}/cloudburst-autoscaler', github.repository_owner) }}
 
 jobs:
   frontend:
@@ -35,6 +40,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
       - name: TypeScript check
         run: npx tsc -b --noEmit
 
@@ -47,16 +56,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout cloudburst-autoscaler
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/cloudburst-autoscaler
-          path: ../cloudburst-autoscaler
-          ref: main
+      - name: Clone cloudburst-autoscaler
+        run: |
+          cd ..
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git || \
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git
 
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
 
       - name: Run go vet
         run: go vet ./...
@@ -82,16 +92,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout cloudburst-autoscaler
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/cloudburst-autoscaler
-          path: ../cloudburst-autoscaler
-          ref: main
+      - name: Clone cloudburst-autoscaler
+        run: |
+          cd ..
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git || \
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git
 
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.sum
 
       - uses: actions/setup-node@v4
         with:
@@ -115,12 +126,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout cloudburst-autoscaler
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/cloudburst-autoscaler
-          path: ../cloudburst-autoscaler
-          ref: main
+      - name: Clone cloudburst-autoscaler
+        run: |
+          cd ..
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git || \
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -168,3 +179,33 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone cloudburst-autoscaler
+        run: |
+          cd ..
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ env.AUTOSCALER_REPO }}.git
+
+      - name: Install Kind
+        run: |
+          curl -sLo kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Run UI E2E
+        run: |
+          cd ../cloudburst-autoscaler
+          ./hack/integration-test-e2e-ui.sh
