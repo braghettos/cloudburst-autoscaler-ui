@@ -9,6 +9,7 @@ FROM node:20-alpine AS ui-builder
 WORKDIR /workspace
 COPY cloudburst-autoscaler-ui/web/package.json cloudburst-autoscaler-ui/web/package-lock.json* cloudburst-autoscaler-ui/web/index.html cloudburst-autoscaler-ui/web/vite.config.ts cloudburst-autoscaler-ui/web/tsconfig.json cloudburst-autoscaler-ui/web/tsconfig.node.json cloudburst-autoscaler-ui/web/postcss.config.js cloudburst-autoscaler-ui/web/tailwind.config.js ./
 RUN npm install
+COPY cloudburst-autoscaler-ui/web/public ./public
 COPY cloudburst-autoscaler-ui/web/src ./src
 RUN npm run build
 
