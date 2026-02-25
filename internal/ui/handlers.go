@@ -28,10 +28,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
+	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/cluster"
 )
 
 // ControllerLogsNamespace is the namespace where the CloudBurst controller runs.
@@ -42,8 +42,33 @@ const ControllerLogsLabelSelector = "app=cloudburst-controller"
 
 // Handlers provides HTTP handlers for the CloudBurst UI API.
 type Handlers struct {
-	Client    client.Client
-	Clientset kubernetes.Interface
+	Registry *cluster.Registry
+}
+
+// getClusterClient returns the ClusterClient from request context (set by middleware).
+func getClusterClient(r *http.Request) *cluster.ClusterClient {
+	v := r.Context().Value(cluster.ClusterClientKey{})
+	if cc, ok := v.(*cluster.ClusterClient); ok {
+		return cc
+	}
+	return nil
+}
+
+func writeError(w http.ResponseWriter, code int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func (h *Handlers) listClusters(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	infos, err := h.Registry.ListClusters(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(infos)
 }
 
 // PodSummary represents a simplified pod for the UI.
@@ -160,10 +185,15 @@ type DashboardStats struct {
 }
 
 func (h *Handlers) listPods(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 	var pods corev1.PodList
-	if err := h.Client.List(ctx, &pods); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pods); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -221,20 +251,25 @@ func (h *Handlers) listPods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) getPod(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	namespace := r.PathValue("namespace")
 	name := r.PathValue("name")
 	if namespace == "" || name == "" {
-		http.Error(w, "namespace and name required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "namespace and name required")
 		return
 	}
 	ctx := r.Context()
 	var pod corev1.Pod
-	if err := h.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &pod); err != nil {
+	if err := cc.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &pod); err != nil {
 		if errors.IsNotFound(err) {
-			http.Error(w, "pod not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "pod not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var cpuTotal, memTotal resource.Quantity
@@ -273,10 +308,15 @@ func (h *Handlers) getPod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 	var claims cloudburstv1alpha1.NodeClaimList
-	if err := h.Client.List(ctx, &claims); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &claims); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -364,20 +404,25 @@ func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	namespace := r.PathValue("namespace")
 	name := r.PathValue("name")
 	if namespace == "" || name == "" {
-		http.Error(w, "namespace and name required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "namespace and name required")
 		return
 	}
 	ctx := r.Context()
 	var c cloudburstv1alpha1.NodeClaim
-	if err := h.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &c); err != nil {
+	if err := cc.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &c); err != nil {
 		if errors.IsNotFound(err) {
-			http.Error(w, "nodeclaim not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "nodeclaim not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	provider := ""
@@ -447,16 +492,21 @@ func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) listNodePools(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 	var pools cloudburstv1alpha1.NodePoolList
-	if err := h.Client.List(ctx, &pools); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pools); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var claims cloudburstv1alpha1.NodeClaimList
-	if err := h.Client.List(ctx, &claims); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &claims); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -490,24 +540,29 @@ func (h *Handlers) listNodePools(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) getNodePool(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	namespace := r.PathValue("namespace")
 	name := r.PathValue("name")
 	if namespace == "" || name == "" {
-		http.Error(w, "namespace and name required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "namespace and name required")
 		return
 	}
 	ctx := r.Context()
 	var pool cloudburstv1alpha1.NodePool
-	if err := h.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &pool); err != nil {
+	if err := cc.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &pool); err != nil {
 		if errors.IsNotFound(err) {
-			http.Error(w, "nodepool not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "nodepool not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var claims cloudburstv1alpha1.NodeClaimList
-	_ = h.Client.List(ctx, &claims)
+	_ = cc.Client.List(ctx, &claims)
 	count := 0
 	for _, c := range claims.Items {
 		if c.Namespace == namespace && c.Spec.NodePoolRef == name {
@@ -532,10 +587,15 @@ func (h *Handlers) getNodePool(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) listNodes(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 	var nodes corev1.NodeList
-	if err := h.Client.List(ctx, &nodes); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &nodes); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -569,28 +629,33 @@ type GraphDataResponse struct {
 }
 
 func (h *Handlers) graphData(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 
 	listOpts := []client.ListOption{client.InNamespace(metav1.NamespaceAll)}
 
 	var pods corev1.PodList
-	if err := h.Client.List(ctx, &pods, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pods, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var claims cloudburstv1alpha1.NodeClaimList
-	if err := h.Client.List(ctx, &claims, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &claims, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var pools cloudburstv1alpha1.NodePoolList
-	if err := h.Client.List(ctx, &pools, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pools, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var nodes corev1.NodeList
-	if err := h.Client.List(ctx, &nodes); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &nodes); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -677,24 +742,41 @@ func listNodeClaimsToSummary(items []cloudburstv1alpha1.NodeClaim, filterNS, fil
 		if c.Status.Timestamps.LastTransition.Unix() > 0 {
 			lastTransition = c.Status.Timestamps.LastTransition.Format(time.RFC3339)
 		}
+		var recUsed *InstanceDetailsSummary
+		if c.Status.RecommendationUsed != nil {
+			recUsed = &InstanceDetailsSummary{
+				Provider:        c.Status.RecommendationUsed.Provider,
+				Region:          c.Status.RecommendationUsed.Region,
+				InstanceType:    c.Status.RecommendationUsed.InstanceType,
+				VCPU:            c.Status.RecommendationUsed.VCPU,
+				RamGb:           c.Status.RecommendationUsed.RamGb,
+				PriceEurPerHour: c.Status.RecommendationUsed.PriceEurPerHour,
+			}
+		}
+		var recReq *RecommendationRequestSummary
+		if c.Status.RecommendationRequest != nil {
+			recReq = recommendationRequestFromCR(c.Status.RecommendationRequest)
+		}
 		result = append(result, NodeClaimSummary{
-			Namespace:         c.Namespace,
-			Name:              c.Name,
-			Phase:             string(c.Status.Phase),
-			NodePoolRef:       c.Spec.NodePoolRef,
-			Provider:          provider,
-			Region:            region,
-			InstanceType:      instanceType,
-			VCPU:              vcpu,
-			RamGb:             ramGb,
-			PriceEurPerHour:   priceEur,
-			InstanceID:        c.Status.InstanceID,
-			NodeName:          c.Status.NodeName,
-			LastError:         c.Status.LastError,
-			CreatedAt:         createdAt,
-			ReadyAt:           readyAt,
-			LastTransition:    lastTransition,
-			CreationTimestamp: c.CreationTimestamp,
+			Namespace:              c.Namespace,
+			Name:                   c.Name,
+			Phase:                  string(c.Status.Phase),
+			NodePoolRef:            c.Spec.NodePoolRef,
+			Provider:               provider,
+			Region:                 region,
+			InstanceType:           instanceType,
+			VCPU:                   vcpu,
+			RamGb:                  ramGb,
+			PriceEurPerHour:        priceEur,
+			InstanceID:             c.Status.InstanceID,
+			NodeName:               c.Status.NodeName,
+			RecommendationRequest:  recReq,
+			RecommendationUsed:     recUsed,
+			LastError:              c.Status.LastError,
+			CreatedAt:              createdAt,
+			ReadyAt:                readyAt,
+			LastTransition:         lastTransition,
+			CreationTimestamp:      c.CreationTimestamp,
 		})
 	}
 	return result
@@ -747,31 +829,36 @@ func listNodesToSummary(items []corev1.Node) []NodeSummary {
 }
 
 func (h *Handlers) dashboard(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	ctx := r.Context()
 
 	listOpts := []client.ListOption{client.InNamespace(metav1.NamespaceAll)}
 
 	var pods corev1.PodList
-	if err := h.Client.List(ctx, &pods, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pods, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var claims cloudburstv1alpha1.NodeClaimList
-	if err := h.Client.List(ctx, &claims, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &claims, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var pools cloudburstv1alpha1.NodePoolList
-	if err := h.Client.List(ctx, &pools, listOpts...); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &pools, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	var nodes corev1.NodeList
-	if err := h.Client.List(ctx, &nodes); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := cc.Client.List(ctx, &nodes); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -822,19 +909,24 @@ func (h *Handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) getNode(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
 	name := r.PathValue("name")
 	if name == "" {
-		http.Error(w, "name required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "name required")
 		return
 	}
 	ctx := r.Context()
 	var node corev1.Node
-	if err := h.Client.Get(ctx, types.NamespacedName{Name: name}, &node); err != nil {
+	if err := cc.Client.Get(ctx, types.NamespacedName{Name: name}, &node); err != nil {
 		if errors.IsNotFound(err) {
-			http.Error(w, "node not found", http.StatusNotFound)
+			writeError(w, http.StatusNotFound, "node not found")
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	ready := false
@@ -862,8 +954,13 @@ type ControllerLogsResponse struct {
 }
 
 func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
-	if h.Clientset == nil {
-		http.Error(w, "logs not available: Kubernetes clientset not configured", http.StatusServiceUnavailable)
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
+	if cc.Clientset == nil {
+		writeError(w, http.StatusServiceUnavailable, "logs not available: Kubernetes clientset not configured")
 		return
 	}
 	ctx := r.Context()
@@ -875,7 +972,7 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	podList, err := h.Clientset.CoreV1().Pods(ControllerLogsNamespace).List(ctx, metav1.ListOptions{
+	podList, err := cc.Clientset.CoreV1().Pods(ControllerLogsNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: ControllerLogsLabelSelector,
 	})
 	if err != nil {
@@ -894,7 +991,7 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pod := &podList.Items[0]
-	req := h.Clientset.CoreV1().Pods(ControllerLogsNamespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+	req := cc.Clientset.CoreV1().Pods(ControllerLogsNamespace).GetLogs(pod.Name, &corev1.PodLogOptions{
 		TailLines: &tailLines,
 	})
 	logStream, err := req.Stream(ctx)

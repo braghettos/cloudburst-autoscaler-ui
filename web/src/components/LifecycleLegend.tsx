@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useCluster } from '../contexts/ClusterContext'
+import { clusterPath } from '../utils/routes'
 import { StatusBadge } from './StatusBadge'
 
 const mainPathPhases = ['Pending', 'Provisioning', 'Joining', 'Ready'] as const
@@ -17,6 +19,7 @@ const phaseTooltips: Record<string, string> = {
 
 export function LifecycleLegend() {
   const [expanded, setExpanded] = useState(true)
+  const { clusterId } = useCluster()
 
   return (
     <div className="bg-gray-50/80 dark:bg-gray-800/80 rounded-xl overflow-hidden">
@@ -47,7 +50,7 @@ export function LifecycleLegend() {
       {expanded && (
         <div className="px-3 pb-3 pt-0 space-y-2">
           <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
-            <Link to="/nodeclaims" className="text-primary-600 dark:text-primary-400 hover:underline">
+            <Link to={clusterPath(clusterId, '/nodeclaims')} className="text-primary-600 dark:text-primary-400 hover:underline">
               View NodeClaims
             </Link>
             {' · '}

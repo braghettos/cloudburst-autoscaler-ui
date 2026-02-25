@@ -1,43 +1,44 @@
 import { Link, useParams } from 'react-router-dom'
+import { useCluster } from '../contexts/ClusterContext'
 import { useNodeClaim } from '../api/hooks'
 import { StatusBadge } from '../components/StatusBadge'
+import { clusterPath } from '../utils/routes'
+import { ErrorAlert } from '../components/ErrorAlert'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
 export function NodeClaimDetailPage() {
+  const { clusterId, apiClusterId } = useCluster()
   const { namespace = '', name = '' } = useParams<{ namespace: string; name: string }>()
-  const { data: claim, isLoading, isError, error } = useNodeClaim(namespace, name)
+  const { data: claim, isLoading, isError, error } = useNodeClaim(apiClusterId, namespace, name)
 
   if (isLoading) {
-    return <div className="animate-pulse h-48 bg-gray-200 dark:bg-gray-700 rounded" />
+    return <LoadingSkeleton variant="detail" />
   }
   if (isError || !claim) {
-    return (
-      <div className="text-red-600 dark:text-red-400">
-        {error instanceof Error ? error.message : 'NodeClaim not found'}
-      </div>
-    )
+    return <ErrorAlert error={error ?? new Error('NodeClaim not found')} title="NodeClaim not found" />
   }
 
   return (
     <div className="space-y-4">
       <nav className="text-sm text-gray-500 dark:text-gray-400">
-        <Link to="/" className="hover:text-primary-600">Overview</Link>
+        <Link to={clusterId ? clusterPath(clusterId, '/overview') : '/'} className="hover:text-primary-600">Overview</Link>
         <span className="mx-1">/</span>
-        <Link to="/nodeclaims" className="hover:text-primary-600">Node Claims</Link>
+        <Link to={clusterPath(clusterId, '/nodeclaims')} className="hover:text-primary-600">Node Claims</Link>
         <span className="mx-1">/</span>
         <span className="text-gray-900 dark:text-gray-100">{claim.namespace}/{claim.name}</span>
       </nav>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+        <h1 className="text-xl font-semibold mb-4 flex items-center gap-2">
           {claim.namespace}/{claim.name}
           <StatusBadge phase={claim.phase} />
-        </h2>
+        </h1>
         <dl className="grid grid-cols-2 gap-3">
           <dt className="text-gray-500 dark:text-gray-400">Phase</dt>
           <dd>{claim.phase}</dd>
           <dt className="text-gray-500 dark:text-gray-400">Node Pool</dt>
           <dd>
             <Link
-              to={`/nodepools/${claim.namespace}/${claim.nodePoolRef}`}
+              to={clusterPath(clusterId, `/nodepools/${claim.namespace}/${claim.nodePoolRef}`)}
               className="text-primary-600 hover:underline"
             >
               {claim.nodePoolRef}
@@ -46,7 +47,7 @@ export function NodeClaimDetailPage() {
           <dt className="text-gray-500 dark:text-gray-400">Node</dt>
           <dd>
             {claim.nodeName ? (
-              <Link to={`/nodes/${claim.nodeName}`} className="text-primary-600 hover:underline">
+              <Link to={clusterPath(clusterId, `/nodes/${claim.nodeName}`)} className="text-primary-600 hover:underline">
                 {claim.nodeName}
               </Link>
             ) : (

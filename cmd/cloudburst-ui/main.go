@@ -30,12 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
+	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/cluster"
 	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/ui"
 )
 
@@ -56,25 +54,19 @@ func main() {
 	webDir := flag.String("web-dir", "", "Directory containing static web files (default: ./web relative to binary)")
 	flag.Parse()
 
-	cfg, err := config.GetConfig()
+	registry, err := cluster.NewRegistry(cluster.RegistryConfig{Scheme: scheme})
 	if err != nil {
-		os.Stderr.WriteString("failed to get kubeconfig: " + err.Error() + "\n")
+		os.Stderr.WriteString("failed to create cluster registry: " + err.Error() + "\n")
 		os.Exit(1)
 	}
-
-	c, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		os.Stderr.WriteString("failed to create client: " + err.Error() + "\n")
-		os.Exit(1)
+	ids := registry.KnownClusterIDs()
+	if len(ids) > 0 {
+		ctrl.Log.WithName("cloudburst-ui").Info("clusters loaded from kubeconfig", "ids", ids)
+	} else {
+		ctrl.Log.WithName("cloudburst-ui").Info("no clusters in kubeconfig; set KUBECONFIG to include your cluster context")
 	}
 
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		os.Stderr.WriteString("failed to create Kubernetes clientset: " + err.Error() + "\n")
-		os.Exit(1)
-	}
-
-	handlers := &ui.Handlers{Client: c, Clientset: clientset}
+	handlers := &ui.Handlers{Registry: registry}
 	server := ui.NewServer(handlers, *addr, *webDir)
 
 	// Prefer -web-dir if provided and exists; otherwise use embedded files

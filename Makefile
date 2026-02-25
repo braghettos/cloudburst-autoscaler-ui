@@ -17,7 +17,10 @@ build-ui-binary: build-ui-assets ## Build Go binary
 	CGO_ENABLED=0 go build -o bin/cloudburst-ui ./cmd/cloudburst-ui/
 
 .PHONY: run
-run: build ## Run CloudBurst UI locally. Uses kubeconfig. Open http://localhost:8082
+run: build ## Run CloudBurst UI locally. Uses KUBECONFIG or ~/.kube/config. Open http://localhost:8082
+	@echo "Tip: The UI loads clusters from kubeconfig at startup. For Kind (e.g. kind-cloudburst),"
+	@echo "     ensure the context exists: kubectl config get-contexts"
+	@echo "     Set KUBECONFIG if needed, then restart this server."
 	./bin/cloudburst-ui
 
 .PHONY: dev

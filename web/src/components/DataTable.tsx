@@ -1,4 +1,5 @@
 import { ReactNode } from 'react'
+import { EmptyState } from './EmptyState'
 
 export interface Column<T> {
   key: string
@@ -9,6 +10,7 @@ export interface Column<T> {
 interface DataTableProps<T> {
   columns: Column<T>[]
   data: T[]
+  rowKey: (item: T, index: number) => string
   onRowClick?: (item: T) => void
   emptyMessage?: string
 }
@@ -16,13 +18,12 @@ interface DataTableProps<T> {
 export function DataTable<T>({
   columns,
   data,
+  rowKey,
   onRowClick,
   emptyMessage = 'No data',
 }: DataTableProps<T>) {
   if (data.length === 0) {
-    return (
-      <div className="text-center py-12 text-gray-500 dark:text-gray-400">{emptyMessage}</div>
-    )
+    return <EmptyState title={emptyMessage} />
   }
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
@@ -42,7 +43,7 @@ export function DataTable<T>({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-900">
           {data.map((item, i) => (
             <tr
-              key={i}
+              key={rowKey(item, i)}
               onClick={() => onRowClick?.(item)}
               className={
                 onRowClick

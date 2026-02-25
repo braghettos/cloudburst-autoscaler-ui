@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCluster } from '../contexts/ClusterContext'
+import { clusterPath } from '../utils/routes'
 import { usePods } from '../api/hooks'
 import { DataTable, type Column } from '../components/DataTable'
 import { StatusBadge } from '../components/StatusBadge'
+import { ErrorAlert } from '../components/ErrorAlert'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import type { PodSummary } from '../types/api'
 
 export function PodsPage() {
+  const { clusterId, apiClusterId } = useCluster()
   const [searchParams] = useSearchParams()
   const phaseFromUrl = searchParams.get('phase') ?? ''
   const [namespace, setNamespace] = useState(searchParams.get('namespace') ?? '')
@@ -14,6 +19,7 @@ export function PodsPage() {
   const navigate = useNavigate()
 
   const { data: pods = [], isLoading, isError, error } = usePods({
+    clusterId: apiClusterId,
     namespace: namespace || undefined,
     phase: phase || undefined,
   })
@@ -36,7 +42,7 @@ export function PodsPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Pods</h2>
+      <h1 className="text-lg font-semibold">Pods</h1>
       <div className="flex flex-wrap gap-4 items-center">
         <input
           type="text"
@@ -64,17 +70,14 @@ export function PodsPage() {
           className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm"
         />
       </div>
-      {isLoading && <div className="animate-pulse h-32 bg-gray-200 dark:bg-gray-700 rounded" />}
-      {isError && (
-        <div className="text-red-600 dark:text-red-400">
-          {error instanceof Error ? error.message : 'Failed to load'}
-        </div>
-      )}
+      {isLoading && <LoadingSkeleton variant="list" />}
+      {isError && <ErrorAlert error={error ?? new Error('Failed to load')} />}
       {!isLoading && !isError && (
         <DataTable
           columns={columns}
           data={filtered}
-          onRowClick={(p) => navigate(`/pods/${p.namespace}/${p.name}`)}
+          rowKey={(p) => `${p.namespace}/${p.name}`}
+          onRowClick={(p) => navigate(clusterPath(clusterId, `/pods/${p.namespace}/${p.name}`))}
           emptyMessage="No pods"
         />
       )}

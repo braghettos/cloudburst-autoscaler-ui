@@ -1,5 +1,8 @@
 # Build from parent dir (containing both cloudburst-autoscaler and cloudburst-autoscaler-ui):
 #   cd /path/to/parent && docker build -f cloudburst-autoscaler-ui/Dockerfile -t cloudburst-autoscaler-ui .
+#
+# Runtime: kubeconfig via KUBECONFIG (file path) or KUBECONFIG_DIR (directory of kubeconfig files).
+# Fleet mode: set KUBECONFIG_DIR to a dir with one .kubeconfig/.yaml per cluster.
 
 # Stage 1: Build React UI assets
 FROM node:20-alpine AS ui-builder

@@ -18,6 +18,8 @@ package ui
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"io"
 	"io/fs"
 	"net/http"
@@ -25,6 +27,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/cluster"
 )
 
 // Server configures and runs the HTTP server for the CloudBurst UI.
@@ -60,35 +64,81 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // ListenAndServe starts the HTTP server.
 func (s *Server) ListenAndServe() error {
-	mux := http.NewServeMux()
+	apiMux := http.NewServeMux()
 
-	// API routes (detail routes before list routes for path matching)
-	mux.HandleFunc("GET /api/pods/{namespace}/{name}", s.Handlers.getPod)
-	mux.HandleFunc("GET /api/pods", s.Handlers.listPods)
-	mux.HandleFunc("GET /api/nodeclaims/{namespace}/{name}", s.Handlers.getNodeClaim)
-	mux.HandleFunc("GET /api/nodeclaims", s.Handlers.listNodeClaims)
-	mux.HandleFunc("GET /api/nodepools/{namespace}/{name}", s.Handlers.getNodePool)
-	mux.HandleFunc("GET /api/nodepools", s.Handlers.listNodePools)
-	mux.HandleFunc("GET /api/nodes/{name}", s.Handlers.getNode)
-	mux.HandleFunc("GET /api/nodes", s.Handlers.listNodes)
-	mux.HandleFunc("GET /api/dashboard", s.Handlers.dashboard)
-	mux.HandleFunc("GET /api/graph", s.Handlers.graphData)
-	mux.HandleFunc("GET /api/logs/controller", s.Handlers.getControllerLogs)
+	// GET /api/clusters - fleet list (no cluster scoping)
+	apiMux.HandleFunc("GET /api/clusters", s.Handlers.listClusters)
 
-	// Static file server for web UI (SPA: serve index.html for unknown paths)
+	// Scoped routes: GET /api/clusters/{clusterId}/...
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/pods/{namespace}/{name}", s.withCluster(s.Handlers.getPod))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/pods", s.withCluster(s.Handlers.listPods))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodeclaims/{namespace}/{name}", s.withCluster(s.Handlers.getNodeClaim))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodeclaims", s.withCluster(s.Handlers.listNodeClaims))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodepools/{namespace}/{name}", s.withCluster(s.Handlers.getNodePool))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodepools", s.withCluster(s.Handlers.listNodePools))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodes/{name}", s.withCluster(s.Handlers.getNode))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/nodes", s.withCluster(s.Handlers.listNodes))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/dashboard", s.withCluster(s.Handlers.dashboard))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/graph", s.withCluster(s.Handlers.graphData))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/logs/controller", s.withCluster(s.Handlers.getControllerLogs))
+
+	// Route /api to API mux first; everything else to SPA
+	var spaHandler http.Handler
 	if s.WebFS != nil {
-		mux.Handle("GET /", spafileServer(s.WebFS))
+		spaHandler = spafileServer(s.WebFS)
 	} else if s.WebDir != "" {
-		mux.Handle("GET /", spafileServerDir(s.WebDir))
+		spaHandler = spafileServerDir(s.WebDir)
+	} else {
+		spaHandler = http.NotFoundHandler()
 	}
 
-	handler := corsMiddleware(mux)
+	handler := corsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api") {
+			apiMux.ServeHTTP(w, r)
+			return
+		}
+		spaHandler.ServeHTTP(w, r)
+	}))
 	return http.ListenAndServe(s.Addr, handler)
 }
 
+type handlerFunc func(http.ResponseWriter, *http.Request)
+
+// withCluster extracts clusterId from path, resolves ClusterClient, injects into context.
+func (s *Server) withCluster(fn handlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		clusterId := r.PathValue("clusterId")
+		if clusterId == "" {
+			http.Error(w, "cluster id required", http.StatusBadRequest)
+			return
+		}
+		cc := s.Handlers.Registry.GetClient(clusterId)
+		if cc == nil {
+			available := s.Handlers.Registry.KnownClusterIDs()
+			msg := "cluster not found"
+			if len(available) > 0 {
+				msg = "cluster not found; available: " + strings.Join(available, ", ")
+			} else {
+				msg = "cluster not found; no clusters in kubeconfig (check KUBECONFIG env)"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]any{"error": msg, "clusterId": clusterId})
+			return
+		}
+		ctx := context.WithValue(r.Context(), cluster.ClusterClientKey{}, cc)
+		fn(w, r.WithContext(ctx))
+	}
+}
+
 // spafileServer serves static files; 404s fall back to index.html for SPA routing.
+// Never serves index.html for /api paths (avoids HTML response when API route misses).
 func spafileServer(fsys fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api") {
+			http.NotFound(w, r)
+			return
+		}
 		urlPath := strings.TrimPrefix(r.URL.Path, "/")
 		if urlPath == "" {
 			urlPath = "index.html"
@@ -122,8 +172,13 @@ func spafileServer(fsys fs.FS) http.Handler {
 }
 
 // spafileServerDir serves from a directory; 404s fall back to index.html.
+// Never serves index.html for /api paths.
 func spafileServerDir(dir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api") {
+			http.NotFound(w, r)
+			return
+		}
 		urlPath := strings.TrimPrefix(r.URL.Path, "/")
 		if urlPath == "" {
 			urlPath = "index.html"

@@ -1,87 +1,122 @@
 import { useQuery } from '@tanstack/react-query'
-import type { DashboardStats, NodeClaimSummary, NodePoolSummary, NodeSummary, PodSummary } from '../types/api'
+import type {
+  ClusterInfo,
+  DashboardStats,
+  NodeClaimSummary,
+  NodePoolSummary,
+  NodeSummary,
+  PodSummary,
+} from '../types/api'
 import { api } from './client'
 
-export function useDashboard() {
+export function useClusters() {
+  return useQuery<ClusterInfo[]>({
+    queryKey: ['clusters'],
+    queryFn: api.clusters,
+  })
+}
+
+export function useDashboard(clusterId?: string) {
   return useQuery<DashboardStats>({
-    queryKey: ['dashboard'],
-    queryFn: api.dashboard,
+    queryKey: ['dashboard', clusterId],
+    queryFn: () => api.dashboard(clusterId),
+    enabled: !!clusterId,
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   })
 }
 
-export function usePods(params?: { namespace?: string; phase?: string }) {
+export function usePods(params?: { clusterId?: string; namespace?: string; phase?: string }) {
   return useQuery<PodSummary[]>({
-    queryKey: ['pods', params?.namespace, params?.phase],
+    queryKey: ['pods', params?.clusterId, params?.namespace, params?.phase],
     queryFn: () => api.pods(params),
+    enabled: !!params?.clusterId,
   })
 }
 
-export function usePod(namespace: string, name: string | undefined) {
+export function usePod(clusterId: string | undefined, namespace: string, name: string | undefined) {
   return useQuery<PodSummary>({
-    queryKey: ['pod', namespace, name],
-    queryFn: () => api.pod(namespace, name!),
+    queryKey: ['pod', clusterId, namespace, name],
+    queryFn: () => api.pod(clusterId, namespace, name!),
     enabled: !!namespace && !!name,
   })
 }
 
-export function useNodeClaims(params?: { namespace?: string; phase?: string }) {
+export function useNodeClaims(params?: {
+  clusterId?: string
+  namespace?: string
+  phase?: string
+}) {
   return useQuery<NodeClaimSummary[]>({
-    queryKey: ['nodeclaims', params?.namespace, params?.phase],
+    queryKey: ['nodeclaims', params?.clusterId, params?.namespace, params?.phase],
     queryFn: () => api.nodeclaims(params),
+    enabled: !!params?.clusterId,
   })
 }
 
-export function useNodeClaim(namespace: string, name: string | undefined) {
+export function useNodeClaim(
+  clusterId: string | undefined,
+  namespace: string,
+  name: string | undefined
+) {
   return useQuery<NodeClaimSummary>({
-    queryKey: ['nodeclaim', namespace, name],
-    queryFn: () => api.nodeclaim(namespace, name!),
+    queryKey: ['nodeclaim', clusterId, namespace, name],
+    queryFn: () => api.nodeclaim(clusterId, namespace, name!),
     enabled: !!namespace && !!name,
   })
 }
 
-export function useNodePools(params?: { namespace?: string }) {
+export function useNodePools(params?: { clusterId?: string; namespace?: string }) {
   return useQuery<NodePoolSummary[]>({
-    queryKey: ['nodepools', params?.namespace],
+    queryKey: ['nodepools', params?.clusterId, params?.namespace],
     queryFn: () => api.nodepools(params),
+    enabled: !!params?.clusterId,
   })
 }
 
-export function useNodePool(namespace: string, name: string | undefined) {
+export function useNodePool(
+  clusterId: string | undefined,
+  namespace: string,
+  name: string | undefined
+) {
   return useQuery<NodePoolSummary>({
-    queryKey: ['nodepool', namespace, name],
-    queryFn: () => api.nodepool(namespace, name!),
+    queryKey: ['nodepool', clusterId, namespace, name],
+    queryFn: () => api.nodepool(clusterId, namespace, name!),
     enabled: !!namespace && !!name,
   })
 }
 
-export function useNodes() {
+export function useNodes(clusterId?: string) {
   return useQuery<NodeSummary[]>({
-    queryKey: ['nodes'],
-    queryFn: api.nodes,
+    queryKey: ['nodes', clusterId],
+    queryFn: () => api.nodes(clusterId),
+    enabled: !!clusterId,
   })
 }
 
-export function useNode(name: string | undefined) {
+export function useNode(clusterId: string | undefined, name: string | undefined) {
   return useQuery<NodeSummary>({
-    queryKey: ['node', name],
-    queryFn: () => api.node(name!),
+    queryKey: ['node', clusterId, name],
+    queryFn: () => api.node(clusterId, name!),
     enabled: !!name,
   })
 }
 
-export function useControllerLogs(tail?: number) {
+export function useControllerLogs(clusterId?: string, tail?: number) {
   return useQuery({
-    queryKey: ['controllerLogs', tail],
-    queryFn: () => api.controllerLogs({ tail }),
+    queryKey: ['controllerLogs', clusterId, tail],
+    queryFn: () => api.controllerLogs({ clusterId, tail }),
+    enabled: !!clusterId,
     refetchInterval: 5000,
   })
 }
 
-export function useGraphData() {
+export function useGraphData(clusterId?: string) {
   const query = useQuery({
-    queryKey: ['graph'],
-    queryFn: api.graph,
-    refetchInterval: 5000, // refresh every 5s during E2E
+    queryKey: ['graph', clusterId],
+    queryFn: () => api.graph(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: 5000,
   })
   const data = query.data
   return {

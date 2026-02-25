@@ -71,6 +71,17 @@ export interface NodeSummary {
   creationTimestamp: string
 }
 
+export interface ClusterInfo {
+  id: string
+  name: string
+  context: string
+  reachable: boolean
+  totalNodes: number
+  cloudburstNodes: number
+  totalNodeClaims: number
+  pendingPods: number
+}
+
 export interface DashboardStats {
   totalPods: number
   pendingPods: number

@@ -13,8 +13,13 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Package, Cpu, Server, Layers, Maximize2, Filter } from 'lucide-react'
+import { useCluster } from '../contexts/ClusterContext'
 import { useGraphData } from '../api/hooks'
 import { ResourceNode } from '../components/graph/ResourceNode'
+import { ErrorAlert } from '../components/ErrorAlert'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
+import { EmptyState } from '../components/EmptyState'
+import { ToggleSwitch } from '../components/ToggleSwitch'
 import type { NodeSummary, NodeClaimSummary, NodePoolSummary, PodSummary } from '../types/api'
 
 const NODE_WIDTH = 200
@@ -345,8 +350,9 @@ function FitViewOnFilterChange({ cloudburstOnly }: { cloudburstOnly: boolean }) 
 }
 
 export function GraphPage() {
+  const { apiClusterId } = useCluster()
   const [cloudburstOnly, setCloudburstOnly] = useState(true)
-  const { pods, nodeclaims, nodepools, nodes, isLoading, isError, error: fetchError } = useGraphData()
+  const { pods, nodeclaims, nodepools, nodes, isLoading, isError, error: fetchError } = useGraphData(apiClusterId)
 
   const filtered = useMemo(() => {
     if (cloudburstOnly) {
@@ -369,14 +375,10 @@ export function GraphPage() {
   }, [nodes])
 
   if (isLoading) {
-    return <div className="animate-pulse h-96 bg-gray-200 dark:bg-gray-700 rounded" />
+    return <LoadingSkeleton variant="graph" />
   }
   if (isError || fetchError) {
-    return (
-      <div className="text-red-600 dark:text-red-400">
-        {fetchError instanceof Error ? fetchError.message : 'Failed to load'}
-      </div>
-    )
+    return <ErrorAlert error={fetchError ?? new Error('Failed to load')} title="Failed to load graph" />
   }
 
   const isEmpty = !filtered.pods.length && !filtered.nodeclaims.length && !filtered.nodepools.length && !filtered.nodes.length
@@ -385,34 +387,18 @@ export function GraphPage() {
     return (
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-lg font-semibold">Resource Graph</h2>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <span
-              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
-                  cloudburstOnly ? 'left-5' : 'left-0.5'
-                }`}
-              />
-              <input
-                type="checkbox"
-                checked={cloudburstOnly}
-                onChange={(e) => setCloudburstOnly(e.target.checked)}
-                className="sr-only"
-              />
-            </span>
-            <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
-          </label>
+          <h1 className="text-lg font-semibold">Resource Graph</h1>
+          <ToggleSwitch
+            checked={cloudburstOnly}
+            onChange={setCloudburstOnly}
+            label="CloudBurst only"
+          />
         </div>
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-          <p className="mb-2 font-medium">No CloudBurst resources yet.</p>
-          <p className="text-sm">
-            Create a NodePool and trigger a pending pod to see autoscaling. Ensure the UI is connected to the correct cluster (kubeconfig).
-          </p>
-        </div>
+        <EmptyState
+          title="No CloudBurst resources yet."
+          description="Create a NodePool and trigger a pending pod to see autoscaling. Ensure the UI is connected to the correct cluster (kubeconfig)."
+          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+        />
       </div>
     )
   }
@@ -421,34 +407,18 @@ export function GraphPage() {
     return (
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-lg font-semibold">Resource Graph</h2>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <span
-              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
-                  cloudburstOnly ? 'left-5' : 'left-0.5'
-                }`}
-              />
-              <input
-                type="checkbox"
-                checked={cloudburstOnly}
-                onChange={(e) => setCloudburstOnly(e.target.checked)}
-                className="sr-only"
-              />
-            </span>
-            <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
-          </label>
+          <h1 className="text-lg font-semibold">Resource Graph</h1>
+          <ToggleSwitch
+            checked={cloudburstOnly}
+            onChange={setCloudburstOnly}
+            label="CloudBurst only"
+          />
         </div>
-        <div className="text-center py-12 text-gray-500 dark:text-gray-400 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-          <p className="mb-2">No resources to display.</p>
-          <p className="text-sm">
-            Create a NodePool and trigger a pending pod to see the autoscaling graph. Ensure the UI is connected to the correct cluster (kubeconfig).
-          </p>
-        </div>
+        <EmptyState
+          title="No resources to display."
+          description="Create a NodePool and trigger a pending pod to see the autoscaling graph. Ensure the UI is connected to the correct cluster (kubeconfig)."
+          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50"
+        />
       </div>
     )
   }
@@ -463,30 +433,15 @@ export function GraphPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-lg font-semibold">Resource Graph</h2>
+        <h1 className="text-lg font-semibold">Resource Graph</h1>
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm">
             <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <span
-                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                  cloudburstOnly ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow absolute top-0.5 transition-all ${
-                    cloudburstOnly ? 'left-5' : 'left-0.5'
-                  }`}
-                />
-                <input
-                  type="checkbox"
-                  checked={cloudburstOnly}
-                  onChange={(e) => setCloudburstOnly(e.target.checked)}
-                  className="sr-only"
-                />
-              </span>
-              <span className="text-gray-700 dark:text-gray-300">CloudBurst only</span>
-            </label>
+            <ToggleSwitch
+              checked={cloudburstOnly}
+              onChange={setCloudburstOnly}
+              label="CloudBurst only"
+            />
           </div>
           <div className="hidden sm:flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
             {stats.map(({ label, value, icon: Icon }) => (

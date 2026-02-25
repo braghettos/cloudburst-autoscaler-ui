@@ -1,15 +1,19 @@
 import { useState } from 'react'
+import { useCluster } from '../contexts/ClusterContext'
 import { useControllerLogs } from '../api/hooks'
 import { RefreshCw } from 'lucide-react'
+import { ErrorAlert } from '../components/ErrorAlert'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
 
 export function LogsPage() {
+  const { apiClusterId } = useCluster()
   const [tail, setTail] = useState(500)
-  const { data, isLoading, isError, error, refetch, isFetching } = useControllerLogs(tail)
+  const { data, isLoading, isError, error, refetch, isFetching } = useControllerLogs(apiClusterId, tail)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-lg font-semibold">CloudBurst Controller Logs</h2>
+        <h1 className="text-lg font-semibold">CloudBurst Controller Logs</h1>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <span className="text-gray-500 dark:text-gray-400">Tail lines</span>
@@ -42,14 +46,12 @@ export function LogsPage() {
         </p>
       )}
 
-      {isLoading && (
-        <div className="animate-pulse h-64 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-      )}
+      {isLoading && <LoadingSkeleton variant="graph" />}
       {isError && (
-        <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
-          <p className="font-medium">Failed to load controller logs</p>
-          <p className="text-sm mt-1">{error instanceof Error ? error.message : String(error)}</p>
-        </div>
+        <ErrorAlert
+          error={error ?? new Error('Failed to load')}
+          title="Failed to load controller logs"
+        />
       )}
       {data?.error && !data.logs && (
         <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">

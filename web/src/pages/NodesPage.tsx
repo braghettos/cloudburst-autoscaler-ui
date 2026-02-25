@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useCluster } from '../contexts/ClusterContext'
+import { clusterPath } from '../utils/routes'
 import { useNodes } from '../api/hooks'
 import { DataTable, type Column } from '../components/DataTable'
+import { ErrorAlert } from '../components/ErrorAlert'
+import { LoadingSkeleton } from '../components/LoadingSkeleton'
 import type { NodeSummary } from '../types/api'
 
 export function NodesPage() {
+  const { clusterId, apiClusterId } = useCluster()
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
 
-  const { data: nodes = [], isLoading, isError, error } = useNodes()
+  const { data: nodes = [], isLoading, isError, error } = useNodes(apiClusterId)
 
   const filtered = nodes.filter((n) => !search || n.name.includes(search))
 
@@ -24,7 +29,7 @@ export function NodesPage() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Nodes</h2>
+      <h1 className="text-lg font-semibold">Nodes</h1>
       <div className="flex flex-wrap gap-4 items-center">
         <input
           type="text"
@@ -34,17 +39,14 @@ export function NodesPage() {
           className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm"
         />
       </div>
-      {isLoading && <div className="animate-pulse h-32 bg-gray-200 dark:bg-gray-700 rounded" />}
-      {isError && (
-        <div className="text-red-600 dark:text-red-400">
-          {error instanceof Error ? error.message : 'Failed to load'}
-        </div>
-      )}
+      {isLoading && <LoadingSkeleton variant="list" />}
+      {isError && <ErrorAlert error={error ?? new Error('Failed to load')} />}
       {!isLoading && !isError && (
         <DataTable
           columns={columns}
           data={filtered}
-          onRowClick={(n) => navigate(`/nodes/${n.name}`)}
+          rowKey={(n) => n.name}
+          onRowClick={(n) => navigate(clusterPath(clusterId, `/nodes/${n.name}`))}
           emptyMessage="No nodes"
         />
       )}

@@ -10,14 +10,18 @@ import {
   XCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useCluster } from '../contexts/ClusterContext'
+import { clusterPath } from '../utils/routes'
 import { useDashboard, usePods, useNodeClaims } from '../api/hooks'
 import { StatCard } from '../components/StatCard'
 import { LifecycleLegend } from '../components/LifecycleLegend'
+import { ErrorAlert } from '../components/ErrorAlert'
 
 export function OverviewPage() {
-  const { data: stats, isLoading, isError, error } = useDashboard()
-  const { data: pods } = usePods()
-  const { data: claims } = useNodeClaims()
+  const { clusterId, apiClusterId } = useCluster()
+  const { data: stats, isLoading, isError, error, refetch } = useDashboard(apiClusterId)
+  const { data: pods } = usePods({ clusterId: apiClusterId })
+  const { data: claims } = useNodeClaims({ clusterId: apiClusterId })
 
   const allUnschedulable = (pods ?? []).filter((p) => p.unschedulable)
   const allFailedClaims = (claims ?? []).filter((c) => c.phase === 'Failed')
@@ -58,10 +62,12 @@ export function OverviewPage() {
 
   if (isError || !stats) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 text-red-800 dark:text-red-200">
-        Error: {error instanceof Error ? error.message : 'Failed to load'}
-        <p className="text-sm mt-1">Is the UI server running? Try: make run-ui</p>
-      </div>
+      <ErrorAlert
+        error={error ?? new Error('Failed to load')}
+        variant="cluster"
+        hint={`Ensure ${clusterId ?? 'the cluster'} exists in your kubeconfig. Set KUBECONFIG and restart the UI server (./bin/cloudburst-ui).`}
+        onRetry={() => refetch()}
+      />
     )
   }
 
@@ -100,27 +106,27 @@ export function OverviewPage() {
           <StatCard
             title="Total Pods"
             value={stats.totalPods}
-            to="/pods"
+            to={clusterId ? clusterPath(clusterId, '/pods') : undefined}
             icon={Layers}
           />
           <StatCard
             title="Pending"
             value={stats.pendingPods}
-            to="/pods?phase=Pending"
+            to={clusterId ? clusterPath(clusterId, '/pods?phase=Pending') : undefined}
             icon={Clock}
             accent="info"
           />
           <StatCard
             title="Running"
             value={stats.runningPods}
-            to="/pods?phase=Running"
+            to={clusterId ? clusterPath(clusterId, '/pods?phase=Running') : undefined}
             icon={Play}
             accent="success"
           />
           <StatCard
             title="Unschedulable"
             value={stats.unschedulablePods}
-            to="/pods"
+            to={clusterId ? clusterPath(clusterId, '/pods') : undefined}
             icon={AlertTriangle}
             accent="warning"
           />
@@ -136,20 +142,20 @@ export function OverviewPage() {
             title="NodeClaims"
             value={stats.totalNodeClaims}
             label={`${phases.Ready ?? 0} Ready, ${phases.Pending ?? 0} Pending, ${phases.Provisioning ?? 0} Provisioning`}
-            to="/nodeclaims"
+            to={clusterId ? clusterPath(clusterId, '/nodeclaims') : undefined}
             icon={Cpu}
           />
           <StatCard
             title="Node Pools"
             value={stats.nodePoolCount}
-            to="/nodepools"
+            to={clusterId ? clusterPath(clusterId, '/nodepools') : undefined}
             icon={Package}
           />
           <StatCard
             title="CloudBurst Nodes"
             value={stats.cloudburstNodes}
             label={`of ${stats.totalNodes} total`}
-            to="/nodes"
+            to={clusterId ? clusterPath(clusterId, '/nodes') : undefined}
             icon={Server}
           />
         </div>
@@ -173,7 +179,7 @@ export function OverviewPage() {
                   {unschedulablePods.map((p) => (
                     <li key={`${p.namespace}/${p.name}`}>
                       <Link
-                        to={`/pods/${p.namespace}/${p.name}`}
+                        to={clusterPath(clusterId, `/pods/${p.namespace}/${p.name}`)}
                         className="text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         {p.namespace}/{p.name}
@@ -183,7 +189,7 @@ export function OverviewPage() {
                 </ul>
                 {allUnschedulable.length > 5 && (
                   <Link
-                    to="/pods"
+                    to={clusterPath(clusterId, '/pods')}
                     className="text-sm text-primary-600 dark:text-primary-400 hover:underline mt-2 inline-block"
                   >
                     View all ({allUnschedulable.length})
@@ -201,7 +207,7 @@ export function OverviewPage() {
                   {failedClaims.map((c) => (
                     <li key={`${c.namespace}/${c.name}`}>
                       <Link
-                        to={`/nodeclaims/${c.namespace}/${c.name}`}
+                        to={clusterPath(clusterId, `/nodeclaims/${c.namespace}/${c.name}`)}
                         className="text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         {c.namespace}/{c.name}
@@ -219,7 +225,7 @@ export function OverviewPage() {
                 </ul>
                 {allFailedClaims.length > 5 && (
                   <Link
-                    to="/nodeclaims"
+                    to={clusterPath(clusterId, '/nodeclaims')}
                     className="text-sm text-primary-600 dark:text-primary-400 hover:underline mt-2 inline-block"
                   >
                     View all ({allFailedClaims.length})
@@ -232,7 +238,7 @@ export function OverviewPage() {
       )}
 
       <Link
-        to="/graph"
+        to={clusterPath(clusterId, '/graph')}
         className="flex flex-col sm:flex-row items-center gap-4 p-6 bg-gradient-to-r from-primary-50 to-primary-100/50 dark:from-primary-900/30 dark:to-primary-800/20 rounded-xl border border-primary-200/50 dark:border-primary-700/30 hover:border-primary-300 dark:hover:border-primary-600 transition"
       >
         <div className="flex items-center gap-4 flex-1 w-full sm:w-auto">
