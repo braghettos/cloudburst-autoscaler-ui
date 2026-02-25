@@ -13,6 +13,8 @@ import { NodesPage } from './pages/NodesPage'
 import { NodeDetailPage } from './pages/NodeDetailPage'
 import { GraphPage } from './pages/GraphPage'
 import { LogsPage } from './pages/LogsPage'
+import { MetricsPage } from './pages/MetricsPage'
+import { EventsPage } from './pages/EventsPage'
 import { useClusters } from './api/hooks'
 
 function AppRoutes() {
@@ -56,6 +58,8 @@ function AppRoutes() {
             <Route path="nodes/:name" element={<NodeDetailPage />} />
             <Route path="graph" element={<GraphPage />} />
             <Route path="logs" element={<LogsPage />} />
+            <Route path="metrics" element={<MetricsPage />} />
+            <Route path="events" element={<EventsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

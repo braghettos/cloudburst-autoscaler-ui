@@ -150,6 +150,23 @@ type NodeSummary struct {
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
 }
 
+// EventSummary represents a Kubernetes event for the UI.
+type EventSummary struct {
+	Namespace       string    `json:"namespace"`
+	Name            string    `json:"name"`
+	Type            string    `json:"type"`
+	Reason          string    `json:"reason"`
+	Message         string    `json:"message"`
+	InvolvedKind    string    `json:"involvedKind"`
+	InvolvedName    string    `json:"involvedName"`
+	InvolvedNS      string    `json:"involvedNamespace,omitempty"`
+	SourceComponent string    `json:"sourceComponent,omitempty"`
+	SourceHost      string    `json:"sourceHost,omitempty"`
+	Count           int32     `json:"count"`
+	FirstTimestamp  time.Time `json:"firstTimestamp"`
+	LastTimestamp   time.Time `json:"lastTimestamp"`
+}
+
 func recommendationRequestFromCR(r *cloudburstv1alpha1.RecommendationRequestSummary) *RecommendationRequestSummary {
 	if r == nil {
 		return nil
@@ -620,6 +637,73 @@ func (h *Handlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
+func (h *Handlers) listEvents(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
+	ctx := r.Context()
+
+	namespace := r.URL.Query().Get("namespace")
+	eventType := r.URL.Query().Get("type") // Normal, Warning, or empty for all
+	limit := 500
+	if s := r.URL.Query().Get("limit"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 && n <= 2000 {
+			limit = n
+		}
+	}
+
+	listOpts := []client.ListOption{client.Limit(int64(limit))}
+	if namespace != "" {
+		listOpts = append(listOpts, client.InNamespace(namespace))
+	} else {
+		listOpts = append(listOpts, client.InNamespace(metav1.NamespaceAll))
+	}
+
+	var events corev1.EventList
+	if err := cc.Client.List(ctx, &events, listOpts...); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	result := make([]EventSummary, 0, len(events.Items))
+	for _, e := range events.Items {
+		if eventType != "" && string(e.Type) != eventType {
+			continue
+		}
+		srcComp, srcHost := "", ""
+		if e.Source.Component != "" {
+			srcComp = e.Source.Component
+		}
+		if e.Source.Host != "" {
+			srcHost = e.Source.Host
+		}
+		invNS := ""
+		if e.InvolvedObject.Namespace != "" {
+			invNS = e.InvolvedObject.Namespace
+		}
+		result = append(result, EventSummary{
+			Namespace:       e.Namespace,
+			Name:            e.Name,
+			Type:            string(e.Type),
+			Reason:          e.Reason,
+			Message:         e.Message,
+			InvolvedKind:    e.InvolvedObject.Kind,
+			InvolvedName:    e.InvolvedObject.Name,
+			InvolvedNS:      invNS,
+			SourceComponent: srcComp,
+			SourceHost:      srcHost,
+			Count:           e.Count,
+			FirstTimestamp:  e.FirstTimestamp.Time,
+			LastTimestamp:   e.LastTimestamp.Time,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
 // GraphDataResponse holds all resources needed for the graph in one response.
 type GraphDataResponse struct {
 	Pods      []PodSummary      `json:"pods"`
@@ -953,6 +1037,13 @@ type ControllerLogsResponse struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// ControllerMetricsResponse is the API response for controller metrics.
+type ControllerMetricsResponse struct {
+	Metrics string `json:"metrics"`
+	Pod     string `json:"pod,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	cc := getClusterClient(r)
 	if cc == nil {
@@ -1019,5 +1110,73 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ControllerLogsResponse{
 		Logs: buf.String(),
 		Pod:  pod.Name,
+	})
+}
+
+func (h *Handlers) getControllerMetrics(w http.ResponseWriter, r *http.Request) {
+	cc := getClusterClient(r)
+	if cc == nil {
+		writeError(w, http.StatusBadRequest, "cluster required")
+		return
+	}
+	if cc.Clientset == nil {
+		writeError(w, http.StatusServiceUnavailable, "metrics not available: Kubernetes clientset not configured")
+		return
+	}
+	ctx := r.Context()
+
+	podList, err := cc.Clientset.CoreV1().Pods(ControllerLogsNamespace).List(ctx, metav1.ListOptions{
+		LabelSelector: ControllerLogsLabelSelector,
+	})
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ControllerMetricsResponse{Error: err.Error()})
+		return
+	}
+	if len(podList.Items) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+			Metrics: "",
+			Error:   "no CloudBurst controller pods found in " + ControllerLogsNamespace,
+		})
+		return
+	}
+
+	pod := &podList.Items[0]
+	// Proxy to the controller's metrics endpoint (port 8080, path /metrics)
+	req := cc.Clientset.CoreV1().RESTClient().Get().
+		Namespace(ControllerLogsNamespace).
+		Resource("pods").
+		Name(pod.Name + ":8080").
+		SubResource("proxy").
+		Suffix("metrics")
+
+	res := req.Do(ctx)
+	if res.Error() != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+			Error: "failed to fetch metrics from controller: " + res.Error().Error(),
+			Pod:   pod.Name,
+		})
+		return
+	}
+
+	raw, err := res.Raw()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+			Error: "failed to read metrics response: " + err.Error(),
+			Pod:   pod.Name,
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ControllerMetricsResponse{
+		Metrics: string(raw),
+		Pod:     pod.Name,
 	})
 }

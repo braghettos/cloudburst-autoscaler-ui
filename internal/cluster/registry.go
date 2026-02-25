@@ -70,24 +70,38 @@ type RegistryConfig struct {
 }
 
 // NewRegistry creates a registry and loads clusters.
+// Retries up to 5 times with 2s delay when 0 clusters (handles container startup before cluster ready).
 func NewRegistry(cfg RegistryConfig) (*Registry, error) {
 	loader := NewLoader()
-	entries, err := loader.Load()
-	if err != nil {
-		return nil, err
-	}
-	r := &Registry{
-		clusters: make(map[string]*ClusterClient),
-		loader:   loader,
-		scheme:   cfg.Scheme,
-	}
-	for _, e := range entries {
-		cc, err := r.buildClient(e)
+	var r *Registry
+	for attempt := 0; attempt < 5; attempt++ {
+		entries, err := loader.Load()
 		if err != nil {
-			slog.Warn("skipping cluster: cannot build client", "clusterId", e.ID, "error", err)
-			continue // skip unreachable clusters
+			return nil, err
 		}
-		r.clusters[e.ID] = cc
+		r = &Registry{
+			clusters: make(map[string]*ClusterClient),
+			loader:   loader,
+			scheme:   cfg.Scheme,
+		}
+		for _, e := range entries {
+			cc, err := r.buildClient(e)
+			if err != nil {
+				slog.Warn("skipping cluster: cannot build client", "clusterId", e.ID, "error", err)
+				continue
+			}
+			r.clusters[e.ID] = cc
+		}
+		if len(r.clusters) > 0 {
+			break
+		}
+		if len(entries) == 0 {
+			break // no entries to load, no point retrying
+		}
+		if attempt < 4 {
+			slog.Info("no clusters loaded (all buildClient failed), retrying", "attempt", attempt+1, "nextIn", "2s")
+			time.Sleep(2 * time.Second)
+		}
 	}
 	return r, nil
 }
@@ -121,9 +135,15 @@ func (r *Registry) buildClient(e ClusterEntry) (*ClusterClient, error) {
 		reachable:   true,
 		lastCheck:   time.Now(),
 	}
-	// Quick connectivity check
-	if err := cc.ping(); err != nil {
+	// Connectivity check with retries (cluster may be starting up)
+	for i := 0; i < 3; i++ {
+		if err := cc.ping(); err == nil {
+			break
+		}
 		cc.reachable = false
+		if i < 2 {
+			time.Sleep(2 * time.Second)
+		}
 	}
 	return cc, nil
 }

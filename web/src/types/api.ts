@@ -82,6 +82,22 @@ export interface ClusterInfo {
   pendingPods: number
 }
 
+export interface EventSummary {
+  namespace: string
+  name: string
+  type: string
+  reason: string
+  message: string
+  involvedKind: string
+  involvedName: string
+  involvedNamespace?: string
+  sourceComponent?: string
+  sourceHost?: string
+  count: number
+  firstTimestamp: string
+  lastTimestamp: string
+}
+
 export interface DashboardStats {
   totalPods: number
   pendingPods: number

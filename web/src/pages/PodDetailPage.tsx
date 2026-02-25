@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useCluster } from '../contexts/ClusterContext'
 import { usePod } from '../api/hooks'
+import { Breadcrumb } from '../components/Breadcrumb'
 import { StatusBadge } from '../components/StatusBadge'
 import { clusterPath } from '../utils/routes'
 import { ErrorAlert } from '../components/ErrorAlert'
@@ -20,13 +21,13 @@ export function PodDetailPage() {
 
   return (
     <div className="space-y-4">
-      <nav className="text-sm text-gray-500 dark:text-gray-400">
-        <Link to={clusterId ? clusterPath(clusterId, '/overview') : '/'} className="hover:text-primary-600">Overview</Link>
-        <span className="mx-1">/</span>
-        <Link to={clusterPath(clusterId, '/pods')} className="hover:text-primary-600">Pods</Link>
-        <span className="mx-1">/</span>
-        <span className="text-gray-900 dark:text-gray-100">{pod.namespace}/{pod.name}</span>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: 'Overview', to: clusterId ? clusterPath(clusterId, '/overview') : '/' },
+          { label: 'Pods', to: clusterPath(clusterId, '/pods') },
+          { label: `${pod.namespace}/${pod.name}` },
+        ]}
+      />
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h1 className="text-xl font-semibold mb-4 flex items-center gap-2">
           {pod.namespace}/{pod.name}

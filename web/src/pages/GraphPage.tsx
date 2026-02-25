@@ -27,6 +27,7 @@ const NODE_HEIGHT = 56
 const COLUMN_GAP = 120
 const GROUP_GAP = 40
 const POD_GAP = 12
+const NC_GAP = 10 // vertical gap between NodeClaims sharing the same node (avoids edge overlap)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = { resource: ResourceNode }
@@ -234,13 +235,24 @@ function getLayoutedElements(
   byType.pod.forEach((p) => podNodeById.set(p.id, p))
   const placedPods = new Set<string>()
 
+  // Pre-compute NC count per node to reserve vertical space and avoid edge overlap
+  const ncCountByNode = new Map<string, number>()
+  byType.nodeclaim.forEach((nc) => {
+    const linkedNodeName = ncToNode.get(nc.id)
+    if (linkedNodeName) {
+      ncCountByNode.set(linkedNodeName, (ncCountByNode.get(linkedNodeName) ?? 0) + 1)
+    }
+  })
+
   k8sNodes.forEach((kNode) => {
     const nodeName = String(kNode.data?.label ?? '')
     const podIds = podsByNode.get(nodeName) ?? []
     const groupPodCount = podIds.length
+    const ncCount = ncCountByNode.get(nodeName) ?? 1
     const nodeSlotH = NODE_HEIGHT
     const podsSlotH = groupPodCount > 0 ? groupPodCount * NODE_HEIGHT + (groupPodCount - 1) * POD_GAP : NODE_HEIGHT
-    const groupH = Math.max(nodeSlotH, podsSlotH)
+    const ncSlotH = ncCount * NODE_HEIGHT + (ncCount - 1) * NC_GAP
+    const groupH = Math.max(nodeSlotH, podsSlotH, ncSlotH)
 
     positioned.set(kNode.id, {
       x: colX(COL_NODE),
@@ -273,12 +285,21 @@ function getLayoutedElements(
     if (pos) nodeYById.set(String(kNode.data?.label ?? ''), pos.y)
   })
 
+  // Stack NodeClaims that share the same node to avoid edge overlap
+  const ncIndexByNode = new Map<string, number>()
   const placedNCs = new Set<string>()
   let ncOrphanY = cursorY
   byType.nodeclaim.forEach((nc) => {
     const linkedNodeName = ncToNode.get(nc.id)
     if (linkedNodeName && nodeYById.has(linkedNodeName)) {
-      positioned.set(nc.id, { x: colX(COL_NC), y: nodeYById.get(linkedNodeName)! })
+      const nodeY = nodeYById.get(linkedNodeName)!
+      const count = ncCountByNode.get(linkedNodeName) ?? 1
+      const idx = ncIndexByNode.get(linkedNodeName) ?? 0
+      ncIndexByNode.set(linkedNodeName, idx + 1)
+      const ncSlotH = count * NODE_HEIGHT + (count - 1) * NC_GAP
+      const stackTop = nodeY - (ncSlotH - NODE_HEIGHT) / 2
+      const y = stackTop + idx * (NODE_HEIGHT + NC_GAP)
+      positioned.set(nc.id, { x: colX(COL_NC), y })
       placedNCs.add(nc.id)
     }
   })
@@ -297,6 +318,7 @@ function getLayoutedElements(
     if (pos) ncYById.set(nc.id, pos.y)
   })
 
+  let npOrphanY = 0
   byType.nodepool.forEach((np) => {
     const ncIds = npToNcs.get(np.id) ?? []
     const linkedYs = ncIds.map((id) => ncYById.get(id)).filter((y): y is number => y !== undefined)
@@ -305,7 +327,8 @@ function getLayoutedElements(
       const maxY = Math.max(...linkedYs)
       positioned.set(np.id, { x: colX(COL_NP), y: (minY + maxY) / 2 })
     } else {
-      positioned.set(np.id, { x: colX(COL_NP), y: 0 })
+      positioned.set(np.id, { x: colX(COL_NP), y: npOrphanY })
+      npOrphanY += NODE_HEIGHT + GROUP_GAP
     }
   })
 
@@ -474,7 +497,7 @@ export function GraphPage() {
         </span>
       </div>
 
-      <div className="w-full h-[600px] rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-950 shadow-sm">
+      <div className="w-full min-h-[400px] h-[min(600px,70vh)] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-950 shadow-sm">
         <ReactFlowProvider>
           <ReactFlow
             nodes={flowNodes}

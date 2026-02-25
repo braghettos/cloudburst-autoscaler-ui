@@ -1,3 +1,5 @@
+import { useRef, useEffect } from 'react'
+
 interface ErrorAlertProps {
   error: Error | unknown
   title?: string
@@ -7,6 +9,8 @@ interface ErrorAlertProps {
   variant?: 'default' | 'cluster'
   /** Optional retry callback */
   onRetry?: () => void
+  /** Show "Copy error" button for debugging */
+  showCopy?: boolean
 }
 
 function getErrorMessage(error: Error | unknown): string {
@@ -20,6 +24,7 @@ export function ErrorAlert({
   hint,
   variant = 'default',
   onRetry,
+  showCopy = false,
 }: ErrorAlertProps) {
   const msg = getErrorMessage(error)
   const is404 = typeof msg === 'string' && msg.startsWith('404')
@@ -43,20 +48,48 @@ export function ErrorAlert({
       ? 'Set KUBECONFIG to your kubeconfig and restart the UI server (not the browser).'
       : undefined)
 
+  const retryRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (onRetry) retryRef.current?.focus()
+  }, [onRetry])
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(`${displayTitle}\n${msg}${clusterHint ? `\n${clusterHint}` : ''}`)
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
-    <div className="rounded-xl p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200">
+    <div
+      role="alert"
+      className="rounded-xl p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200"
+    >
       <p className="font-medium">{displayTitle}</p>
       <p className="text-sm mt-1">{msg}</p>
       {clusterHint && <p className="text-sm mt-1 opacity-90">{clusterHint}</p>}
-      {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-3 px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-800/40 hover:bg-red-200 dark:hover:bg-red-800/60 rounded-lg transition"
-        >
-          Retry
-        </button>
-      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {onRetry && (
+          <button
+            ref={retryRef}
+            type="button"
+            onClick={onRetry}
+            className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-800/40 hover:bg-red-200 dark:hover:bg-red-800/60 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-red-500"
+          >
+            Retry
+          </button>
+        )}
+        {showCopy && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="px-4 py-2 text-sm font-medium bg-red-100 dark:bg-red-800/40 hover:bg-red-200 dark:hover:bg-red-800/60 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-red-500"
+          >
+            Copy error
+          </button>
+        )}
+      </div>
     </div>
   )
 }

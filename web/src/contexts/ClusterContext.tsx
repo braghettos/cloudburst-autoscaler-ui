@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, type ReactNode } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import type { ClusterInfo } from '../types/api'
 
 interface ClusterContextValue {
@@ -13,11 +13,19 @@ interface ClusterContextValue {
 
 const ClusterContext = createContext<ClusterContextValue | null>(null)
 
+/** Extract clusterId from path /clusters/:clusterId/... when useParams may not have it yet */
+function clusterIdFromPath(pathname: string): string | null {
+  const m = pathname.match(/^\/clusters\/([^/]+)/)
+  return m ? m[1] : null
+}
+
 export function ClusterProvider({ children, clusters }: { children: ReactNode; clusters: ClusterInfo[] }) {
   const { clusterId: paramClusterId } = useParams<{ clusterId?: string }>()
+  const { pathname } = useLocation()
   const navigate = useNavigate()
 
-  const clusterId = paramClusterId ?? null
+  // Prefer param; fallback to path when on cluster-scoped URL (handles Router timing edge cases)
+  const clusterId = paramClusterId ?? clusterIdFromPath(pathname) ?? null
   const isMultiCluster = clusters.length > 1
   const apiClusterId = clusterId ?? undefined
 

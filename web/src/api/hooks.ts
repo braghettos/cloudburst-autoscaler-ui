@@ -23,6 +23,7 @@ export function useDashboard(clusterId?: string) {
     enabled: !!clusterId,
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+    refetchInterval: 30_000,
   })
 }
 
@@ -102,12 +103,38 @@ export function useNode(clusterId: string | undefined, name: string | undefined)
   })
 }
 
-export function useControllerLogs(clusterId?: string, tail?: number) {
+export function useControllerLogs(clusterId?: string, tail?: number, paused?: boolean) {
   return useQuery({
     queryKey: ['controllerLogs', clusterId, tail],
     queryFn: () => api.controllerLogs({ clusterId, tail }),
     enabled: !!clusterId,
-    refetchInterval: 5000,
+    refetchInterval: paused ? false : 5000,
+  })
+}
+
+export function useControllerMetrics(clusterId?: string, refetchInterval?: number) {
+  return useQuery({
+    queryKey: ['controllerMetrics', clusterId],
+    queryFn: () => api.controllerMetrics(clusterId),
+    enabled: !!clusterId,
+    refetchInterval: refetchInterval ?? 15000,
+  })
+}
+
+export function useEvents(
+  params?: {
+    clusterId?: string
+    namespace?: string
+    type?: string
+    limit?: number
+  },
+  paused?: boolean
+) {
+  return useQuery({
+    queryKey: ['events', params?.clusterId, params?.namespace, params?.type, params?.limit],
+    queryFn: () => api.events(params),
+    enabled: !!params?.clusterId,
+    refetchInterval: paused ? false : 5000,
   })
 }
 

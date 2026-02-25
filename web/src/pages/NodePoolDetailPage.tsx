@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useCluster } from '../contexts/ClusterContext'
 import { useNodePool } from '../api/hooks'
+import { Breadcrumb } from '../components/Breadcrumb'
 import { clusterPath } from '../utils/routes'
 import { ErrorAlert } from '../components/ErrorAlert'
 import { LoadingSkeleton } from '../components/LoadingSkeleton'
@@ -19,13 +20,13 @@ export function NodePoolDetailPage() {
 
   return (
     <div className="space-y-4">
-      <nav className="text-sm text-gray-500 dark:text-gray-400">
-        <Link to={clusterId ? clusterPath(clusterId, '/overview') : '/'} className="hover:text-primary-600">Overview</Link>
-        <span className="mx-1">/</span>
-        <Link to={clusterPath(clusterId, '/nodepools')} className="hover:text-primary-600">Node Pools</Link>
-        <span className="mx-1">/</span>
-        <span className="text-gray-900 dark:text-gray-100">{pool.namespace}/{pool.name}</span>
-      </nav>
+      <Breadcrumb
+        items={[
+          { label: 'Overview', to: clusterId ? clusterPath(clusterId, '/overview') : '/' },
+          { label: 'Node Pools', to: clusterPath(clusterId, '/nodepools') },
+          { label: `${pool.namespace}/${pool.name}` },
+        ]}
+      />
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
         <h1 className="text-xl font-semibold mb-4">{pool.namespace}/{pool.name}</h1>
         <dl className="grid grid-cols-2 gap-3">

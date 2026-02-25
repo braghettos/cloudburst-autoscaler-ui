@@ -99,4 +99,25 @@ export const api = {
     const search = params?.tail ? `?tail=${params.tail}` : ''
     return fetchJSON<{ logs: string; pod?: string; error?: string }>(base + search)
   },
+
+  controllerMetrics: (clusterId?: string) =>
+    fetchJSON<{ metrics: string; pod?: string; error?: string }>(
+      apiPath(clusterId, '/metrics')
+    ),
+
+  events: (params?: {
+    clusterId?: string
+    namespace?: string
+    type?: string
+    limit?: number
+  }) => {
+    const searchParams: Record<string, string> = {}
+    if (params?.namespace) searchParams.namespace = params.namespace
+    if (params?.type) searchParams.type = params.type
+    if (params?.limit) searchParams.limit = String(params.limit)
+    return fetchJSON<import('../types/api').EventSummary[]>(
+      apiPath(params?.clusterId, '/events'),
+      Object.keys(searchParams).length ? searchParams : undefined
+    )
+  },
 }

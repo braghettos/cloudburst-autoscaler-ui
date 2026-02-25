@@ -81,6 +81,8 @@ func (s *Server) ListenAndServe() error {
 	apiMux.HandleFunc("GET /api/clusters/{clusterId}/dashboard", s.withCluster(s.Handlers.dashboard))
 	apiMux.HandleFunc("GET /api/clusters/{clusterId}/graph", s.withCluster(s.Handlers.graphData))
 	apiMux.HandleFunc("GET /api/clusters/{clusterId}/logs/controller", s.withCluster(s.Handlers.getControllerLogs))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/metrics", s.withCluster(s.Handlers.getControllerMetrics))
+	apiMux.HandleFunc("GET /api/clusters/{clusterId}/events", s.withCluster(s.Handlers.listEvents))
 
 	// Route /api to API mux first; everything else to SPA
 	var spaHandler http.Handler
@@ -107,7 +109,7 @@ type handlerFunc func(http.ResponseWriter, *http.Request)
 // withCluster extracts clusterId from path, resolves ClusterClient, injects into context.
 func (s *Server) withCluster(fn handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		clusterId := r.PathValue("clusterId")
+		clusterId := strings.TrimSpace(r.PathValue("clusterId"))
 		if clusterId == "" {
 			http.Error(w, "cluster id required", http.StatusBadRequest)
 			return
