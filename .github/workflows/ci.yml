@@ -19,6 +19,7 @@ env:
   NODE_VERSION: "20"
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  UI_REPO: ${{ vars.UI_REPO != '' && vars.UI_REPO || format('{0}/cloudburst-autoscaler-ui', github.repository_owner) }}
   AUTOSCALER_REPO: ${{ vars.AUTOSCALER_REPO != '' && vars.AUTOSCALER_REPO || format('{0}/cloudburst-autoscaler', github.repository_owner) }}
 
 jobs:
@@ -29,7 +30,10 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudburst-autoscaler-ui
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPO }}
 
       - uses: actions/setup-node@v4
         with:
@@ -45,7 +49,7 @@ jobs:
         continue-on-error: true
 
       - name: TypeScript check
-        run: npx tsc -b --noEmit
+        run: npx tsc --noEmit
 
       - name: Build
         run: npm run build
@@ -54,7 +58,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudburst-autoscaler-ui
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
         run: |
@@ -90,7 +97,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [frontend, lint]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudburst-autoscaler-ui
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
         run: |
@@ -124,7 +134,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudburst-autoscaler-ui
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
         run: |
@@ -186,7 +199,10 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout cloudburst-autoscaler-ui
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
         run: |
