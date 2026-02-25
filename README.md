@@ -154,6 +154,14 @@ docker build -f cloudburst-autoscaler-ui/Dockerfile -t cloudburst-autoscaler-ui 
 
 The Dockerfile expects the cloudburst-autoscaler module at `../cloudburst-autoscaler` for API types.
 
+## CI
+
+GitHub Actions CI clones `cloudburst-autoscaler` as a sibling for the Go build. **For private repos**, `GITHUB_TOKEN` cannot access other private repositories—you must add a Personal Access Token:
+
+1. **Create a PAT** — GitHub → Settings → Developer settings → Personal access tokens → Fine-grained (or classic) with `Contents: Read-only` for both `cloudburst-autoscaler-ui` and `cloudburst-autoscaler`.
+2. **Add secret** — In the UI repo: Settings → Secrets and variables → Actions → New repository secret → `REPO_ACCESS_TOKEN` = your PAT.
+3. **Optional variable** — If the autoscaler is in a different org, add variable `AUTOSCALER_REPO` = `owner/cloudburst-autoscaler`.
+
 ## Documentation
 
 - [Cloudburst Autoscaler](https://github.com/braghettos/cloudburst-autoscaler) — Controller and CRD documentation
