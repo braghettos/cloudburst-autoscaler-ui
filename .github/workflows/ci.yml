@@ -56,7 +56,7 @@ jobs:
 
       - name: Audit dependencies
         run: npm audit --audit-level=high
-        continue-on-error: true
+        continue-on-error: ${{ vars.NPM_AUDIT_CONTINUE_ON_ERROR == 'true' }}
 
       - name: TypeScript check
         run: npx tsc --noEmit
@@ -74,21 +74,10 @@ jobs:
           repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
-        env:
-          CLONE_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          cd ..
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          if git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch ${BRANCH})"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch main)"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/diegobraga/cloudburst-autoscaler.git cloudburst-autoscaler; then
-            echo "Cloned diegobraga/cloudburst-autoscaler (fallback)"
-          else
-            echo "::error::Private repos require REPO_ACCESS_TOKEN. Create a PAT (repo scope), add it as a secret: Settings > Secrets > Actions > REPO_ACCESS_TOKEN. Set AUTOSCALER_REPO variable if the autoscaler is in a different org."
-            exit 1
-          fi
+        uses: ./.github/actions/clone-autoscaler
+        with:
+          autoscaler_repo: ${{ env.AUTOSCALER_REPO }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
@@ -123,21 +112,10 @@ jobs:
           repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
-        env:
-          CLONE_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          cd ..
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          if git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch ${BRANCH})"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch main)"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/diegobraga/cloudburst-autoscaler.git cloudburst-autoscaler; then
-            echo "Cloned diegobraga/cloudburst-autoscaler (fallback)"
-          else
-            echo "::error::Private repos require REPO_ACCESS_TOKEN. Create a PAT (repo scope), add it as a secret: Settings > Secrets > Actions > REPO_ACCESS_TOKEN. Set AUTOSCALER_REPO variable if the autoscaler is in a different org."
-            exit 1
-          fi
+        uses: ./.github/actions/clone-autoscaler
+        with:
+          autoscaler_repo: ${{ env.AUTOSCALER_REPO }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-go@v5
         with:
@@ -170,21 +148,10 @@ jobs:
           repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
-        env:
-          CLONE_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          cd ..
-          BRANCH="${{ github.head_ref || github.ref_name }}"
-          if git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch ${BRANCH})"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch main)"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/diegobraga/cloudburst-autoscaler.git cloudburst-autoscaler; then
-            echo "Cloned diegobraga/cloudburst-autoscaler (fallback)"
-          else
-            echo "::error::Private repos require REPO_ACCESS_TOKEN. Create a PAT (repo scope), add it as a secret: Settings > Secrets > Actions > REPO_ACCESS_TOKEN. Set AUTOSCALER_REPO variable if the autoscaler is in a different org."
-            exit 1
-          fi
+        uses: ./.github/actions/clone-autoscaler
+        with:
+          autoscaler_repo: ${{ env.AUTOSCALER_REPO }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -236,7 +203,6 @@ jobs:
   e2e:
     name: E2E
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [build]
     steps:
       - name: Checkout cloudburst-autoscaler-ui
@@ -245,18 +211,11 @@ jobs:
           repository: ${{ env.UI_REPO }}
 
       - name: Clone cloudburst-autoscaler
-        env:
-          CLONE_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          cd ..
-          if git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/${{ env.AUTOSCALER_REPO }}.git cloudburst-autoscaler 2>/dev/null; then
-            echo "Cloned ${{ env.AUTOSCALER_REPO }} (branch main)"
-          elif git clone --depth 1 --branch main https://x-access-token:${CLONE_TOKEN}@github.com/diegobraga/cloudburst-autoscaler.git cloudburst-autoscaler; then
-            echo "Cloned diegobraga/cloudburst-autoscaler (fallback)"
-          else
-            echo "::error::Private repos require REPO_ACCESS_TOKEN. Create a PAT (repo scope), add it as a secret: Settings > Secrets > Actions > REPO_ACCESS_TOKEN. Set AUTOSCALER_REPO variable if the autoscaler is in a different org."
-            exit 1
-          fi
+        uses: ./.github/actions/clone-autoscaler
+        with:
+          autoscaler_repo: ${{ env.AUTOSCALER_REPO }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+          branch: main
 
       - name: Install Kind
         run: |
@@ -269,6 +228,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
           cache-dependency-path: web/package-lock.json
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
 
       - name: Run UI E2E
         run: |

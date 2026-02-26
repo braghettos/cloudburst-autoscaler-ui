@@ -1,0 +1,36 @@
+# Composite action: clone cloudburst-autoscaler as sibling of workspace.
+# For private repos, pass token from REPO_ACCESS_TOKEN (PAT with repo scope).
+name: Clone cloudburst-autoscaler
+description: Clone cloudburst-autoscaler repo for Go build and E2E
+
+inputs:
+  autoscaler_repo:
+    description: 'Owner/repo (e.g. diegobraga/cloudburst-autoscaler)'
+    required: true
+  token:
+    description: 'GitHub token (GITHUB_TOKEN or PAT for private repos)'
+    required: true
+  branch:
+    description: 'Branch to clone (default: head_ref or ref_name)'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Clone cloudburst-autoscaler
+      shell: bash
+      run: |
+        cd ..
+        BRANCH="${{ inputs.branch }}"
+        [ -z "${BRANCH}" ] && BRANCH="${{ github.head_ref || github.ref_name }}"
+        if git clone --depth 1 --branch "${BRANCH}" https://x-access-token:${{ inputs.token }}@github.com/${{ inputs.autoscaler_repo }}.git cloudburst-autoscaler 2>/dev/null; then
+          echo "Cloned ${{ inputs.autoscaler_repo }} (branch ${BRANCH})"
+        elif git clone --depth 1 --branch main https://x-access-token:${{ inputs.token }}@github.com/${{ inputs.autoscaler_repo }}.git cloudburst-autoscaler 2>/dev/null; then
+          echo "Cloned ${{ inputs.autoscaler_repo }} (branch main)"
+        elif git clone --depth 1 --branch main https://x-access-token:${{ inputs.token }}@github.com/diegobraga/cloudburst-autoscaler.git cloudburst-autoscaler; then
+          echo "Cloned diegobraga/cloudburst-autoscaler (fallback)"
+        else
+          echo "::error::Private repos require REPO_ACCESS_TOKEN. Create a PAT (repo scope), add it as a secret: Settings > Secrets > Actions > REPO_ACCESS_TOKEN. Set AUTOSCALER_REPO variable if the autoscaler is in a different org."
+          exit 1
+        fi
