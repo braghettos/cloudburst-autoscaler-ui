@@ -117,7 +117,7 @@ func (s *Server) withCluster(fn handlerFunc) http.HandlerFunc {
 		cc := s.Handlers.Registry.GetClient(clusterId)
 		if cc == nil {
 			available := s.Handlers.Registry.KnownClusterIDs()
-			msg := "cluster not found"
+			var msg string
 			if len(available) > 0 {
 				msg = "cluster not found; available: " + strings.Join(available, ", ")
 			} else {
@@ -125,7 +125,7 @@ func (s *Server) withCluster(fn handlerFunc) http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]any{"error": msg, "clusterId": clusterId})
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": msg, "clusterId": clusterId})
 			return
 		}
 		ctx := context.WithValue(r.Context(), cluster.ClusterClientKey{}, cc)

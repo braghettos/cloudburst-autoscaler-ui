@@ -57,7 +57,7 @@ func getClusterClient(r *http.Request) *cluster.ClusterClient {
 func writeError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func (h *Handlers) listClusters(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +68,7 @@ func (h *Handlers) listClusters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(infos)
+	_ = json.NewEncoder(w).Encode(infos)
 }
 
 // PodSummary represents a simplified pod for the UI.
@@ -264,7 +264,7 @@ func (h *Handlers) listPods(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) getPod(w http.ResponseWriter, r *http.Request) {
@@ -321,7 +321,7 @@ func (h *Handlers) getPod(w http.ResponseWriter, r *http.Request) {
 		CreationTimestamp: pod.CreationTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
@@ -417,7 +417,7 @@ func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +505,7 @@ func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
 		CreationTimestamp:     c.CreationTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) listNodePools(w http.ResponseWriter, r *http.Request) {
@@ -553,7 +553,7 @@ func (h *Handlers) listNodePools(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) getNodePool(w http.ResponseWriter, r *http.Request) {
@@ -600,7 +600,7 @@ func (h *Handlers) getNodePool(w http.ResponseWriter, r *http.Request) {
 		CreationTimestamp: pool.CreationTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) listNodes(w http.ResponseWriter, r *http.Request) {
@@ -634,7 +634,7 @@ func (h *Handlers) listNodes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *Handlers) listEvents(w http.ResponseWriter, r *http.Request) {
@@ -701,7 +701,7 @@ func (h *Handlers) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // GraphDataResponse holds all resources needed for the graph in one response.
@@ -750,7 +750,7 @@ func (h *Handlers) graphData(w http.ResponseWriter, r *http.Request) {
 		Nodes:      listNodesToSummary(nodes.Items),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func listPodsToSummary(items []corev1.Pod, filterNS, filterPhase string) []PodSummary {
@@ -989,7 +989,7 @@ func (h *Handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+	_ = json.NewEncoder(w).Encode(stats)
 }
 
 func (h *Handlers) getNode(w http.ResponseWriter, r *http.Request) {
@@ -1027,7 +1027,7 @@ func (h *Handlers) getNode(w http.ResponseWriter, r *http.Request) {
 		CreationTimestamp: node.CreationTimestamp,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // ControllerLogsResponse is the API response for controller logs.
@@ -1069,12 +1069,12 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error()})
+		_ = json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error()})
 		return
 	}
 	if len(podList.Items) == 0 {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ControllerLogsResponse{
+		_ = json.NewEncoder(w).Encode(ControllerLogsResponse{
 			Logs:  "",
 			Error: "no CloudBurst controller pods found in " + ControllerLogsNamespace,
 		})
@@ -1089,7 +1089,7 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error(), Pod: pod.Name})
+		_ = json.NewEncoder(w).Encode(ControllerLogsResponse{Error: err.Error(), Pod: pod.Name})
 		return
 	}
 	defer logStream.Close()
@@ -1107,7 +1107,7 @@ func (h *Handlers) getControllerLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ControllerLogsResponse{
+	_ = json.NewEncoder(w).Encode(ControllerLogsResponse{
 		Logs: buf.String(),
 		Pod:  pod.Name,
 	})
@@ -1131,12 +1131,12 @@ func (h *Handlers) getControllerMetrics(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ControllerMetricsResponse{Error: err.Error()})
+		_ = json.NewEncoder(w).Encode(ControllerMetricsResponse{Error: err.Error()})
 		return
 	}
 	if len(podList.Items) == 0 {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+		_ = json.NewEncoder(w).Encode(ControllerMetricsResponse{
 			Metrics: "",
 			Error:   "no CloudBurst controller pods found in " + ControllerLogsNamespace,
 		})
@@ -1156,7 +1156,7 @@ func (h *Handlers) getControllerMetrics(w http.ResponseWriter, r *http.Request) 
 	if res.Error() != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+		_ = json.NewEncoder(w).Encode(ControllerMetricsResponse{
 			Error: "failed to fetch metrics from controller: " + res.Error().Error(),
 			Pod:   pod.Name,
 		})
@@ -1167,7 +1167,7 @@ func (h *Handlers) getControllerMetrics(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ControllerMetricsResponse{
+		_ = json.NewEncoder(w).Encode(ControllerMetricsResponse{
 			Error: "failed to read metrics response: " + err.Error(),
 			Pod:   pod.Name,
 		})
@@ -1175,7 +1175,7 @@ func (h *Handlers) getControllerMetrics(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ControllerMetricsResponse{
+	_ = json.NewEncoder(w).Encode(ControllerMetricsResponse{
 		Metrics: string(raw),
 		Pod:     pod.Name,
 	})
