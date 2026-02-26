@@ -32,9 +32,9 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/cluster"
 	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/ui"
+	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 )
 
 //go:embed web

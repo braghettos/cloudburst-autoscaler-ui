@@ -30,8 +30,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 	"github.com/diegobraga/cloudburst-autoscaler-ui/internal/cluster"
+	cloudburstv1alpha1 "github.com/diegobraga/cloudburst-autoscaler/api/v1alpha1"
 )
 
 // ControllerLogsNamespace is the namespace where the CloudBurst controller runs.
@@ -73,14 +73,14 @@ func (h *Handlers) listClusters(w http.ResponseWriter, r *http.Request) {
 
 // PodSummary represents a simplified pod for the UI.
 type PodSummary struct {
-	Namespace         string  `json:"namespace"`
-	Name              string  `json:"name"`
-	Phase             string  `json:"phase"`
-	NodeName          string  `json:"nodeName,omitempty"`
-	CPURequest        string  `json:"cpuRequest,omitempty"`
-	MemoryRequest     string  `json:"memoryRequest,omitempty"`
-	Unschedulable     bool    `json:"unschedulable"`
-	UnschedulableMsg  string  `json:"unschedulableMsg,omitempty"`
+	Namespace         string      `json:"namespace"`
+	Name              string      `json:"name"`
+	Phase             string      `json:"phase"`
+	NodeName          string      `json:"nodeName,omitempty"`
+	CPURequest        string      `json:"cpuRequest,omitempty"`
+	MemoryRequest     string      `json:"memoryRequest,omitempty"`
+	Unschedulable     bool        `json:"unschedulable"`
+	UnschedulableMsg  string      `json:"unschedulableMsg,omitempty"`
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
 }
 
@@ -110,43 +110,43 @@ type RecommendationRequestSummary struct {
 
 // NodeClaimSummary represents a NodeClaim for the UI.
 type NodeClaimSummary struct {
-	Namespace              string                        `json:"namespace"`
-	Name                   string                        `json:"name"`
-	Phase                  string                        `json:"phase"`
-	NodePoolRef            string                        `json:"nodePoolRef"`
-	Provider               string                        `json:"provider"`
-	Region                 string                        `json:"region"`
-	InstanceType           string                        `json:"instanceType"`
-	VCPU                   int32                         `json:"vcpu"`
-	RamGb                  float64                       `json:"ramGb"`
-	PriceEurPerHour        float64                       `json:"priceEurPerHour"`
-	InstanceID             string                        `json:"instanceID,omitempty"`
-	NodeName               string                        `json:"nodeName,omitempty"`
-	RecommendationRequest  *RecommendationRequestSummary `json:"recommendationRequest,omitempty"`
-	RecommendationUsed     *InstanceDetailsSummary       `json:"recommendationUsed,omitempty"`
-	LastError              string                        `json:"lastError,omitempty"`
-	CreatedAt              string                        `json:"createdAt,omitempty"`
-	ReadyAt                string                        `json:"readyAt,omitempty"`
-	LastTransition         string                        `json:"lastTransition,omitempty"`
-	CreationTimestamp      metav1.Time                   `json:"creationTimestamp"`
+	Namespace             string                        `json:"namespace"`
+	Name                  string                        `json:"name"`
+	Phase                 string                        `json:"phase"`
+	NodePoolRef           string                        `json:"nodePoolRef"`
+	Provider              string                        `json:"provider"`
+	Region                string                        `json:"region"`
+	InstanceType          string                        `json:"instanceType"`
+	VCPU                  int32                         `json:"vcpu"`
+	RamGb                 float64                       `json:"ramGb"`
+	PriceEurPerHour       float64                       `json:"priceEurPerHour"`
+	InstanceID            string                        `json:"instanceID,omitempty"`
+	NodeName              string                        `json:"nodeName,omitempty"`
+	RecommendationRequest *RecommendationRequestSummary `json:"recommendationRequest,omitempty"`
+	RecommendationUsed    *InstanceDetailsSummary       `json:"recommendationUsed,omitempty"`
+	LastError             string                        `json:"lastError,omitempty"`
+	CreatedAt             string                        `json:"createdAt,omitempty"`
+	ReadyAt               string                        `json:"readyAt,omitempty"`
+	LastTransition        string                        `json:"lastTransition,omitempty"`
+	CreationTimestamp     metav1.Time                   `json:"creationTimestamp"`
 }
 
 // NodePoolSummary represents a NodePool for the UI.
 type NodePoolSummary struct {
-	Namespace         string `json:"namespace"`
-	Name              string `json:"name"`
-	RegionConstraint  string `json:"regionConstraint"`
-	MaxNodes          int32  `json:"maxNodes"`
-	MinNodes          int32  `json:"minNodes"`
-	NodeClaimCount    int    `json:"nodeClaimCount"`
+	Namespace         string      `json:"namespace"`
+	Name              string      `json:"name"`
+	RegionConstraint  string      `json:"regionConstraint"`
+	MaxNodes          int32       `json:"maxNodes"`
+	MinNodes          int32       `json:"minNodes"`
+	NodeClaimCount    int         `json:"nodeClaimCount"`
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
 }
 
 // NodeSummary represents a Kubernetes node for the UI.
 type NodeSummary struct {
-	Name             string `json:"name"`
-	CloudBurstManaged bool   `json:"cloudburstManaged"`
-	Ready            bool   `json:"ready"`
+	Name              string      `json:"name"`
+	CloudBurstManaged bool        `json:"cloudburstManaged"`
+	Ready             bool        `json:"ready"`
 	CreationTimestamp metav1.Time `json:"creationTimestamp"`
 }
 
@@ -172,15 +172,15 @@ func recommendationRequestFromCR(r *cloudburstv1alpha1.RecommendationRequestSumm
 		return nil
 	}
 	out := &RecommendationRequestSummary{
-		MinVCPU:            r.MinVCPU,
-		MinRAMGb:           r.MinRAMGb,
-		RegionConstraint:   r.RegionConstraint,
-		MaxPriceEurPerHour: r.MaxPriceEurPerHour,
-		Arch:               r.Arch,
-		DataSourceProvider: r.DataSourceProvider,
-		DataSourceRegion:   r.DataSourceRegion,
+		MinVCPU:                  r.MinVCPU,
+		MinRAMGb:                 r.MinRAMGb,
+		RegionConstraint:         r.RegionConstraint,
+		MaxPriceEurPerHour:       r.MaxPriceEurPerHour,
+		Arch:                     r.Arch,
+		DataSourceProvider:       r.DataSourceProvider,
+		DataSourceRegion:         r.DataSourceRegion,
 		EstimatedEgressGbPerHour: r.EstimatedEgressGbPerHour,
-		MaxTCOEurPerHour:   r.MaxTCOEurPerHour,
+		MaxTCOEurPerHour:         r.MaxTCOEurPerHour,
 	}
 	if len(r.AllowedProviders) > 0 {
 		out.AllowedProviders = append([]string{}, r.AllowedProviders...)
@@ -190,15 +190,15 @@ func recommendationRequestFromCR(r *cloudburstv1alpha1.RecommendationRequestSumm
 
 // DashboardStats holds aggregated counts for the dashboard.
 type DashboardStats struct {
-	TotalPods            int            `json:"totalPods"`
-	PendingPods          int            `json:"pendingPods"`
-	RunningPods          int            `json:"runningPods"`
-	UnschedulablePods    int            `json:"unschedulablePods"`
-	NodeClaimsByPhase    map[string]int `json:"nodeClaimsByPhase"`
-	TotalNodeClaims      int            `json:"totalNodeClaims"`
-	NodePoolCount        int            `json:"nodePoolCount"`
-	TotalNodes           int            `json:"totalNodes"`
-	CloudBurstNodes      int            `json:"cloudburstNodes"`
+	TotalPods         int            `json:"totalPods"`
+	PendingPods       int            `json:"pendingPods"`
+	RunningPods       int            `json:"runningPods"`
+	UnschedulablePods int            `json:"unschedulablePods"`
+	NodeClaimsByPhase map[string]int `json:"nodeClaimsByPhase"`
+	TotalNodeClaims   int            `json:"totalNodeClaims"`
+	NodePoolCount     int            `json:"nodePoolCount"`
+	TotalNodes        int            `json:"totalNodes"`
+	CloudBurstNodes   int            `json:"cloudburstNodes"`
 }
 
 func (h *Handlers) listPods(w http.ResponseWriter, r *http.Request) {
@@ -394,25 +394,25 @@ func (h *Handlers) listNodeClaims(w http.ResponseWriter, r *http.Request) {
 		}
 
 		result = append(result, NodeClaimSummary{
-			Namespace:              c.Namespace,
-			Name:                   c.Name,
-			Phase:                  string(c.Status.Phase),
-			NodePoolRef:            c.Spec.NodePoolRef,
-			Provider:               provider,
-			Region:                 region,
-			InstanceType:           instanceType,
-			VCPU:                   vcpu,
-			RamGb:                  ramGb,
-			PriceEurPerHour:        priceEur,
-			InstanceID:             c.Status.InstanceID,
-			NodeName:               c.Status.NodeName,
-			RecommendationRequest:  recReq,
-			RecommendationUsed:     recUsed,
-			LastError:              c.Status.LastError,
-			CreatedAt:              createdAt,
+			Namespace:             c.Namespace,
+			Name:                  c.Name,
+			Phase:                 string(c.Status.Phase),
+			NodePoolRef:           c.Spec.NodePoolRef,
+			Provider:              provider,
+			Region:                region,
+			InstanceType:          instanceType,
+			VCPU:                  vcpu,
+			RamGb:                 ramGb,
+			PriceEurPerHour:       priceEur,
+			InstanceID:            c.Status.InstanceID,
+			NodeName:              c.Status.NodeName,
+			RecommendationRequest: recReq,
+			RecommendationUsed:    recUsed,
+			LastError:             c.Status.LastError,
+			CreatedAt:             createdAt,
 			ReadyAt:               readyAt,
-			LastTransition:         lastTransition,
-			CreationTimestamp:      c.CreationTimestamp,
+			LastTransition:        lastTransition,
+			CreationTimestamp:     c.CreationTimestamp,
 		})
 	}
 
@@ -484,22 +484,22 @@ func (h *Handlers) getNodeClaim(w http.ResponseWriter, r *http.Request) {
 		recReq = recommendationRequestFromCR(c.Status.RecommendationRequest)
 	}
 	result := NodeClaimSummary{
-		Namespace:              c.Namespace,
-		Name:                   c.Name,
-		Phase:                  string(c.Status.Phase),
-		NodePoolRef:            c.Spec.NodePoolRef,
-		Provider:               provider,
-		Region:                 region,
-		InstanceType:           instanceType,
-		VCPU:                   vcpu,
-		RamGb:                  ramGb,
-		PriceEurPerHour:        priceEur,
-		InstanceID:             c.Status.InstanceID,
-		NodeName:               c.Status.NodeName,
-		RecommendationRequest:  recReq,
-		RecommendationUsed:     recUsed,
-		LastError:              c.Status.LastError,
-		CreatedAt:              createdAt,
+		Namespace:             c.Namespace,
+		Name:                  c.Name,
+		Phase:                 string(c.Status.Phase),
+		NodePoolRef:           c.Spec.NodePoolRef,
+		Provider:              provider,
+		Region:                region,
+		InstanceType:          instanceType,
+		VCPU:                  vcpu,
+		RamGb:                 ramGb,
+		PriceEurPerHour:       priceEur,
+		InstanceID:            c.Status.InstanceID,
+		NodeName:              c.Status.NodeName,
+		RecommendationRequest: recReq,
+		RecommendationUsed:    recUsed,
+		LastError:             c.Status.LastError,
+		CreatedAt:             createdAt,
 		ReadyAt:               readyAt,
 		LastTransition:        lastTransition,
 		CreationTimestamp:     c.CreationTimestamp,
@@ -706,10 +706,10 @@ func (h *Handlers) listEvents(w http.ResponseWriter, r *http.Request) {
 
 // GraphDataResponse holds all resources needed for the graph in one response.
 type GraphDataResponse struct {
-	Pods      []PodSummary      `json:"pods"`
+	Pods       []PodSummary       `json:"pods"`
 	NodeClaims []NodeClaimSummary `json:"nodeclaims"`
 	NodePools  []NodePoolSummary  `json:"nodepools"`
-	Nodes     []NodeSummary     `json:"nodes"`
+	Nodes      []NodeSummary      `json:"nodes"`
 }
 
 func (h *Handlers) graphData(w http.ResponseWriter, r *http.Request) {
@@ -842,25 +842,25 @@ func listNodeClaimsToSummary(items []cloudburstv1alpha1.NodeClaim, filterNS, fil
 			recReq = recommendationRequestFromCR(c.Status.RecommendationRequest)
 		}
 		result = append(result, NodeClaimSummary{
-			Namespace:              c.Namespace,
-			Name:                   c.Name,
-			Phase:                  string(c.Status.Phase),
-			NodePoolRef:            c.Spec.NodePoolRef,
-			Provider:               provider,
-			Region:                 region,
-			InstanceType:           instanceType,
-			VCPU:                   vcpu,
-			RamGb:                  ramGb,
-			PriceEurPerHour:        priceEur,
-			InstanceID:             c.Status.InstanceID,
-			NodeName:               c.Status.NodeName,
-			RecommendationRequest:  recReq,
-			RecommendationUsed:     recUsed,
-			LastError:              c.Status.LastError,
-			CreatedAt:              createdAt,
-			ReadyAt:                readyAt,
-			LastTransition:         lastTransition,
-			CreationTimestamp:      c.CreationTimestamp,
+			Namespace:             c.Namespace,
+			Name:                  c.Name,
+			Phase:                 string(c.Status.Phase),
+			NodePoolRef:           c.Spec.NodePoolRef,
+			Provider:              provider,
+			Region:                region,
+			InstanceType:          instanceType,
+			VCPU:                  vcpu,
+			RamGb:                 ramGb,
+			PriceEurPerHour:       priceEur,
+			InstanceID:            c.Status.InstanceID,
+			NodeName:              c.Status.NodeName,
+			RecommendationRequest: recReq,
+			RecommendationUsed:    recUsed,
+			LastError:             c.Status.LastError,
+			CreatedAt:             createdAt,
+			ReadyAt:               readyAt,
+			LastTransition:        lastTransition,
+			CreationTimestamp:     c.CreationTimestamp,
 		})
 	}
 	return result
@@ -978,14 +978,14 @@ func (h *Handlers) dashboard(w http.ResponseWriter, r *http.Request) {
 
 	stats := DashboardStats{
 		TotalPods:         len(pods.Items),
-		PendingPods:      pending,
-		RunningPods:      running,
+		PendingPods:       pending,
+		RunningPods:       running,
 		UnschedulablePods: unschedulable,
 		NodeClaimsByPhase: claimsByPhase,
-		TotalNodeClaims:  len(claims.Items),
-		NodePoolCount:    len(pools.Items),
-		TotalNodes:       len(nodes.Items),
-		CloudBurstNodes:  cloudburstNodes,
+		TotalNodeClaims:   len(claims.Items),
+		NodePoolCount:     len(pools.Items),
+		TotalNodes:        len(nodes.Items),
+		CloudBurstNodes:   cloudburstNodes,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1032,9 +1032,9 @@ func (h *Handlers) getNode(w http.ResponseWriter, r *http.Request) {
 
 // ControllerLogsResponse is the API response for controller logs.
 type ControllerLogsResponse struct {
-	Logs   string `json:"logs"`
-	Pod    string `json:"pod,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Logs  string `json:"logs"`
+	Pod   string `json:"pod,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // ControllerMetricsResponse is the API response for controller metrics.

@@ -41,8 +41,8 @@ type ClusterClient struct {
 	Client      client.Client
 	Clientset   kubernetes.Interface
 	restConfig  *rest.Config
-	reachable bool
-	lastCheck time.Time
+	reachable   bool
+	lastCheck   time.Time
 }
 
 // ClusterInfo is the API response for cluster list.
