@@ -79,6 +79,9 @@ jobs:
           autoscaler_repo: ${{ env.AUTOSCALER_REPO }}
           token: ${{ secrets.REPO_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
 
+      - name: Prepare embed placeholder
+        run: mkdir -p cmd/cloudburst-ui/web && echo '<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>CloudBurst</title></head><body>Loading...</body></html>' > cmd/cloudburst-ui/web/index.html
+
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
