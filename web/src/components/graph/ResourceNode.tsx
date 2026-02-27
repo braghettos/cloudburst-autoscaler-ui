@@ -44,11 +44,6 @@ const TYPE_CONFIG: Record<
   },
 }
 
-function truncate(str: string, max = 28): string {
-  if (str.length <= max) return str
-  return str.slice(0, max - 3) + '...'
-}
-
 function ResourceNodeComponent(props: NodeProps) {
   const { selected } = props
   const data = props.data as unknown as ResourceNodeData
@@ -60,7 +55,7 @@ function ResourceNodeComponent(props: NodeProps) {
   return (
     <div
       className={`
-        px-4 py-2.5 rounded-lg border-2 min-w-[160px] max-w-[220px]
+        px-4 py-2.5 rounded-lg border-2 min-w-[160px] max-w-[360px]
         ${config.bg} ${config.border} ${config.text}
         ${selected ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-900' : ''}
       `}
@@ -70,8 +65,8 @@ function ResourceNodeComponent(props: NodeProps) {
         <Icon className="w-4 h-4 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-medium text-gray-600 dark:text-gray-400">{config.label}</div>
-          <div title={label} className="font-mono text-sm truncate">
-            {truncate(label)}
+          <div title={label} className="font-mono text-sm break-words">
+            {label}
           </div>
           {isCloudBurst && (
             <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary-500/20 text-primary-700 dark:text-primary-300">
