@@ -248,3 +248,19 @@ jobs:
         run: |
           cd ../cloudburst-autoscaler
           ./hack/integration-test-e2e-ui.sh
+
+      - name: Upload flow screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudburst-ui-flow-screenshots
+          path: web/test-results/flow-screenshots/
+          if-no-files-found: ignore
+
+      - name: Upload provider flow screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudburst-ui-flow-screenshots-provider
+          path: web/flow-screenshots-*/
+          if-no-files-found: ignore
