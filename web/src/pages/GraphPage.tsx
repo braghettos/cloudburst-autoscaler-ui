@@ -23,11 +23,11 @@ import { ToggleSwitch } from '../components/ToggleSwitch'
 import type { NodeSummary, NodeClaimSummary, NodePoolSummary, PodSummary } from '../types/api'
 
 const NODE_WIDTH = 200
-const NODE_HEIGHT = 56
+const NODE_HEIGHT = 96 // accommodates namespace + name (2 lines) + type label
 const COLUMN_GAP = 120
-const GROUP_GAP = 40
-const POD_GAP = 12
-const NC_GAP = 10 // vertical gap between NodeClaims sharing the same node (avoids edge overlap)
+const GROUP_GAP = 56
+const POD_GAP = 20
+const NC_GAP = 16 // vertical gap between NodeClaims sharing the same node (avoids edge overlap)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = { resource: ResourceNode }
@@ -103,62 +103,65 @@ function buildGraphData(
 
   const npData = nodepools.map((p) => ({
     id: toId('np', p.namespace + '/' + p.name),
-    label: `${p.namespace}/${p.name}`,
+    namespace: p.namespace,
+    name: p.name,
     key: p.namespace + '/' + p.name,
   }))
   const ncData = nodeclaims.map((nc) => ({
-    id: toId('nc', nc.name),
-    label: nc.name,
+    id: toId('nc', nc.namespace + '/' + nc.name),
+    namespace: nc.namespace,
+    name: nc.name,
     nodeName: nc.nodeName,
     poolKey: nc.namespace + '/' + nc.nodePoolRef,
   }))
   const nodeData = nodes.map((n) => ({
     id: toId('n', n.name),
-    label: n.name,
+    name: n.name,
     cloudburstManaged: isCloudBurstNode(n),
   }))
   const podData = pods.map((p) => ({
     id: toId('p', p.namespace + '/' + p.name),
-    label: `${p.namespace}/${p.name}`,
+    namespace: p.namespace,
+    name: p.name,
     nodeName: p.nodeName,
   }))
 
-  npData.forEach(({ id, label }) => {
+  npData.forEach(({ id, namespace, name }) => {
     nodesList.push({
       id,
       type: 'resource',
       position: { x: 0, y: 0 },
-      data: { label, type: 'nodepool' },
+      data: { namespace, name, type: 'nodepool' },
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
     })
   })
-  ncData.forEach(({ id, label }) => {
+  ncData.forEach(({ id, namespace, name }) => {
     nodesList.push({
       id,
       type: 'resource',
       position: { x: 0, y: 0 },
-      data: { label, type: 'nodeclaim' },
+      data: { namespace, name, type: 'nodeclaim' },
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
     })
   })
-  nodeData.forEach(({ id, label, cloudburstManaged }) => {
+  nodeData.forEach(({ id, name, cloudburstManaged }) => {
     nodesList.push({
       id,
       type: 'resource',
       position: { x: 0, y: 0 },
-      data: { label, type: 'node', cloudburstManaged },
+      data: { name, type: 'node', cloudburstManaged },
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
     })
   })
-  podData.forEach(({ id, label }) => {
+  podData.forEach(({ id, namespace, name }) => {
     nodesList.push({
       id,
       type: 'resource',
       position: { x: 0, y: 0 },
-      data: { label, type: 'pod' },
+      data: { namespace, name, type: 'pod' },
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
     })
@@ -176,7 +179,7 @@ function buildGraphData(
   })
   ncData.forEach((nc) => {
     if (!nc.nodeName) return
-    const n = nodeData.find((x) => x.label === nc.nodeName)
+    const n = nodeData.find((x) => x.name === nc.nodeName)
     if (n) {
       edgesList.push({ id: `${nc.id}-${n.id}`, source: nc.id, target: n.id })
       ncToNode.set(nc.id, nc.nodeName)
@@ -184,7 +187,7 @@ function buildGraphData(
   })
   podData.forEach((p) => {
     if (!p.nodeName) return
-    const n = nodeData.find((x) => x.label === p.nodeName)
+    const n = nodeData.find((x) => x.name === p.nodeName)
     if (n) {
       edgesList.push({ id: `${n.id}-${p.id}`, source: n.id, target: p.id })
       const list = podsByNode.get(p.nodeName) ?? []
@@ -245,7 +248,7 @@ function getLayoutedElements(
   })
 
   k8sNodes.forEach((kNode) => {
-    const nodeName = String(kNode.data?.label ?? '')
+    const nodeName = String(kNode.data?.name ?? kNode.data?.label ?? '')
     const podIds = podsByNode.get(nodeName) ?? []
     const groupPodCount = podIds.length
     const ncCount = ncCountByNode.get(nodeName) ?? 1
@@ -282,7 +285,7 @@ function getLayoutedElements(
   const nodeYById = new Map<string, number>()
   k8sNodes.forEach((kNode) => {
     const pos = positioned.get(kNode.id)
-    if (pos) nodeYById.set(String(kNode.data?.label ?? ''), pos.y)
+    if (pos) nodeYById.set(String(kNode.data?.name ?? kNode.data?.label ?? ''), pos.y)
   })
 
   // Stack NodeClaims that share the same node to avoid edge overlap

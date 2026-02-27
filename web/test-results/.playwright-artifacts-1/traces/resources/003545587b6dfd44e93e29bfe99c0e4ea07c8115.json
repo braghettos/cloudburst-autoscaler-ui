@@ -1,1 +1,0 @@
-[{"namespace":"default","name":"e2e-gcp-nodepool","regionConstraint":"ANY","maxNodes":3,"minNodes":0,"nodeClaimCount":1,"creationTimestamp":"2026-02-27T10:19:36Z"}]

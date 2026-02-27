@@ -5,7 +5,10 @@ import { Package, Cpu, Server, Layers } from 'lucide-react'
 export type ResourceNodeType = 'nodepool' | 'nodeclaim' | 'node' | 'pod'
 
 export interface ResourceNodeData {
-  label: string
+  /** Display label (fallback when namespace/name not split) */
+  label?: string
+  namespace?: string
+  name: string
   type: ResourceNodeType
   cloudburstManaged?: boolean
 }
@@ -50,7 +53,9 @@ function ResourceNodeComponent(props: NodeProps) {
   const config = TYPE_CONFIG[data?.type ?? 'pod'] ?? TYPE_CONFIG.pod
   const Icon = config.icon
   const isCloudBurst = data.type === 'node' && data.cloudburstManaged
-  const label = String(data.label ?? '')
+  const name = String(data.name ?? data.label ?? '')
+  const namespace = data.namespace != null && data.namespace !== '' ? String(data.namespace) : undefined
+  const title = namespace ? `${namespace}/${name}` : name
 
   return (
     <div
@@ -65,9 +70,20 @@ function ResourceNodeComponent(props: NodeProps) {
         <Icon className="w-4 h-4 flex-shrink-0" />
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="text-xs font-medium text-gray-600 dark:text-gray-400">{config.label}</div>
-          <div title={label} className="font-mono text-sm break-words line-clamp-2">
-            {label}
-          </div>
+          {namespace != null ? (
+            <>
+              <div className="font-mono text-xs text-gray-500 dark:text-gray-400 truncate" title={namespace}>
+                {namespace}
+              </div>
+              <div title={title} className="font-mono text-sm break-words line-clamp-2">
+                {name}
+              </div>
+            </>
+          ) : (
+            <div title={title} className="font-mono text-sm break-words line-clamp-2">
+              {name}
+            </div>
+          )}
           {isCloudBurst && (
             <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary-500/20 text-primary-700 dark:text-primary-300">
               CloudBurst
