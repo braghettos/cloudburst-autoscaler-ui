@@ -1,0 +1,44 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - link "Skip to main content" [ref=e4] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e5]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - img [ref=e9]
+        - heading "CloudBurst Dashboard" [level=1] [ref=e10]
+      - generic [ref=e11]:
+        - button "Refresh data" [ref=e12] [cursor=pointer]:
+          - img [ref=e13]
+        - button "Switch to dark mode" [ref=e18] [cursor=pointer]:
+          - img [ref=e19]
+    - navigation "Main navigation" [ref=e21]:
+      - link "Fleet" [ref=e23] [cursor=pointer]:
+        - /url: /
+        - img [ref=e24]
+        - text: Fleet
+  - main [ref=e29]:
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "Fleet Overview" [level=1] [ref=e32]
+        - paragraph [ref=e33]: 1 cluster · 3 nodes · 1 NodeClaims · 0 pending pods
+      - link "kind-cloudburst 3 nodes (1 CloudBurst) 1 NodeClaims 0 pending pods View cluster →" [ref=e35] [cursor=pointer]:
+        - /url: /clusters/kind-cloudburst/overview
+        - generic [ref=e36]:
+          - heading "kind-cloudburst" [level=2] [ref=e37]
+          - img [ref=e38]
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - img [ref=e43]
+            - generic [ref=e46]: 3 nodes
+            - generic [ref=e47]: (1 CloudBurst)
+          - generic [ref=e48]:
+            - img [ref=e49]
+            - generic [ref=e52]: 1 NodeClaims
+          - generic [ref=e53]:
+            - img [ref=e54]
+            - generic [ref=e58]: 0 pending pods
+        - generic [ref=e59]: View cluster →
+```

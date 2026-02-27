@@ -63,9 +63,9 @@ function ResourceNodeComponent(props: NodeProps) {
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !border-2" />
       <div className="flex items-center gap-2">
         <Icon className="w-4 h-4 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <div className="text-xs font-medium text-gray-600 dark:text-gray-400">{config.label}</div>
-          <div title={label} className="font-mono text-sm break-words">
+          <div title={label} className="font-mono text-sm break-words line-clamp-2">
             {label}
           </div>
           {isCloudBurst && (
