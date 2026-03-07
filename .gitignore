@@ -2,6 +2,8 @@
 /bin/
 cmd/cloudburst-ui/web/
 web/dist/
+web/vite.config.d.ts
+cloudburst-ui
 
 # Dependencies
 node_modules/
