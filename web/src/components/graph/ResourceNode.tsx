@@ -60,38 +60,38 @@ function ResourceNodeComponent(props: NodeProps) {
   return (
     <div
       className={`
-        px-4 py-2.5 rounded-lg border-2 min-w-[160px] max-w-[360px]
+        relative px-8 py-2.5 rounded-lg border-2 min-w-[320px] max-w-[720px] h-[116px] overflow-hidden flex flex-col
         ${config.bg} ${config.border} ${config.text}
         ${selected ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-gray-900' : ''}
       `}
     >
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !border-2" />
-      <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 flex-shrink-0" />
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="text-xs font-medium text-gray-600 dark:text-gray-400">{config.label}</div>
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !border-2" />
+      <div className="flex items-stretch gap-4 flex-1 min-h-0 py-1">
+        <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center gap-0.5 self-stretch">
+          <div className="text-sm font-medium text-gray-600 dark:text-gray-400">{config.label}</div>
           {namespace != null ? (
             <>
-              <div className="font-mono text-xs text-gray-500 dark:text-gray-400 truncate" title={namespace}>
+              <div className="font-mono text-sm text-gray-500 dark:text-gray-400 truncate" title={namespace}>
                 {namespace}
               </div>
-              <div title={title} className="font-mono text-sm break-words line-clamp-2">
+              <div title={title} className="font-mono text-base break-words line-clamp-3 leading-snug">
                 {name}
               </div>
             </>
           ) : (
-            <div title={title} className="font-mono text-sm break-words line-clamp-2">
+            <div title={title} className="font-mono text-base break-words line-clamp-3 leading-snug">
               {name}
             </div>
           )}
           {isCloudBurst && (
-            <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-primary-500/20 text-primary-700 dark:text-primary-300">
+            <span className="inline-block mt-1 px-1.5 py-0.5 text-xs font-semibold rounded bg-primary-500/20 text-primary-700 dark:text-primary-300">
               CloudBurst
             </span>
           )}
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !border-2" />
     </div>
   )
 }

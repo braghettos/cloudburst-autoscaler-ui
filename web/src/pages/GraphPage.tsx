@@ -14,6 +14,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { Package, Cpu, Server, Layers, Maximize2, Filter } from 'lucide-react'
 import { useCluster } from '../contexts/ClusterContext'
+import { useTheme } from '../theme/ThemeProvider'
 import { useGraphData } from '../api/hooks'
 import { ResourceNode } from '../components/graph/ResourceNode'
 import { ErrorAlert } from '../components/ErrorAlert'
@@ -22,12 +23,11 @@ import { EmptyState } from '../components/EmptyState'
 import { ToggleSwitch } from '../components/ToggleSwitch'
 import type { NodeSummary, NodeClaimSummary, NodePoolSummary, PodSummary } from '../types/api'
 
-const NODE_WIDTH = 200
-const NODE_HEIGHT = 96 // accommodates namespace + name (2 lines) + type label
-const COLUMN_GAP = 120
-const GROUP_GAP = 56
-const POD_GAP = 20
-const NC_GAP = 16 // vertical gap between NodeClaims sharing the same node (avoids edge overlap)
+const NODE_WIDTH = 400
+const NODE_HEIGHT = 116 // fixed height for all nodes (matches node+CloudBurst case)
+const COLUMN_GAP = 200 // horizontal gap between columns (min 200px)
+const VERTICAL_GAP = 80 // vertical gap between nodes in same column (min 80px)
+const BRANCH_GAP = 120 // extra spacing between different branch groups (same parent)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: Record<string, any> = { resource: ResourceNode }
@@ -199,17 +199,53 @@ function buildGraphData(
   return { nodes: nodesList, edges: edgesList, podsByNode, ncToNode, npToNcs }
 }
 
+/** Sort key for alphabetical ordering (namespace/name or name) */
+function sortKey(n: Node): string {
+  const ns = (n.data?.namespace as string) ?? ''
+  const name = String(n.data?.name ?? n.data?.label ?? n.id)
+  return ns ? `${ns}/${name}` : name
+}
+
 /**
- * Relationship-aware column layout.
- * Pods are grouped next to their parent node so each node+pods forms a
- * horizontal swim-lane. NodeClaims align with their node, NodePools center
- * across their NodeClaims.
+ * Build parent -> children order from edges (top-to-bottom = first to last in array).
+ * Ensures child nodes are sorted in the same order as parent connections to avoid edge overlap.
+ */
+function buildSourceToTargets(edges: Edge[]): Map<string, string[]> {
+  const m = new Map<string, string[]>()
+  for (const e of edges) {
+    const list = m.get(e.source) ?? []
+    list.push(e.target)
+    m.set(e.source, list)
+  }
+  return m
+}
+
+/**
+ * Column layout with strict left-to-right flow and no overlapping edges.
+ *
+ * Strategy (bottom-up centering):
+ *  1. Build rows: each row = one NC + its linked Node + that Node's Pods.
+ *     Rows within the same NP group are separated by VERTICAL_GAP;
+ *     rows from different NP groups are separated by BRANCH_GAP.
+ *  2. Row height = height needed by its Pod column (or NODE_HEIGHT when 0 pods).
+ *  3. Within every row:
+ *       • Pods stack from the TOP of the row with VERTICAL_GAP between them.
+ *       • NC and Node are centered vertically inside the row so they align with
+ *         the middle of their Pod group → no edge crossing.
+ *  4. Each NodePool is centered on the vertical extent of all its NC rows.
+ *
+ * This guarantees:
+ *  • Same X per column (strict column alignment).
+ *  • Children centered relative to their parent.
+ *  • Edge order (top-to-bottom) preserved → no overlapping edges.
+ *  • At least VERTICAL_GAP between nodes in the same column.
+ *  • At least COLUMN_GAP between columns.
+ *  • Extra BRANCH_GAP between different NP groups.
  */
 function getLayoutedElements(
   nodes: Node[],
   edges: Edge[],
   podsByNode: Map<string, string[]>,
-  ncToNode: Map<string, string>,
   npToNcs: Map<string, string[]>
 ): { nodes: Node[]; edges: Edge[] } {
   if (nodes.length === 0) return { nodes: [], edges: [] }
@@ -220,6 +256,7 @@ function getLayoutedElements(
   const COL_POD = 3
 
   const colX = (col: number) => col * (NODE_WIDTH + COLUMN_GAP)
+  const sourceToTargets = buildSourceToTargets(edges)
 
   const byId = new Map<string, Node>()
   const byType: Record<string, Node[]> = { nodepool: [], nodeclaim: [], node: [], pod: [] }
@@ -230,116 +267,166 @@ function getLayoutedElements(
     else byType.pod.push(n)
   })
 
+  const ncToNp = new Map<string, string>()
+  npToNcs.forEach((ncIds, npId) => {
+    ncIds.forEach((ncId) => ncToNp.set(ncId, npId))
+  })
+
   const positioned = new Map<string, { x: number; y: number }>()
-  let cursorY = 0
+  const setPos = (id: string, x: number, y: number) => positioned.set(id, { x, y })
 
-  const k8sNodes = byType.node
-  const podNodeById = new Map<string, Node>()
-  byType.pod.forEach((p) => podNodeById.set(p.id, p))
-  const placedPods = new Set<string>()
-
-  // Pre-compute NC count per node to reserve vertical space and avoid edge overlap
-  const ncCountByNode = new Map<string, number>()
-  byType.nodeclaim.forEach((nc) => {
-    const linkedNodeName = ncToNode.get(nc.id)
-    if (linkedNodeName) {
-      ncCountByNode.set(linkedNodeName, (ncCountByNode.get(linkedNodeName) ?? 0) + 1)
-    }
-  })
-
-  k8sNodes.forEach((kNode) => {
-    const nodeName = String(kNode.data?.name ?? kNode.data?.label ?? '')
+  // ── Build ordered pod lists for each Node (edge order → no crossing) ──────
+  const nodeToPodIds = new Map<string, string[]>()
+  byType.node.forEach((n) => {
+    const nodeName = String(n.data?.name ?? n.data?.label ?? '')
     const podIds = podsByNode.get(nodeName) ?? []
-    const groupPodCount = podIds.length
-    const ncCount = ncCountByNode.get(nodeName) ?? 1
-    const nodeSlotH = NODE_HEIGHT
-    const podsSlotH = groupPodCount > 0 ? groupPodCount * NODE_HEIGHT + (groupPodCount - 1) * POD_GAP : NODE_HEIGHT
-    const ncSlotH = ncCount * NODE_HEIGHT + (ncCount - 1) * NC_GAP
-    const groupH = Math.max(nodeSlotH, podsSlotH, ncSlotH)
-
-    positioned.set(kNode.id, {
-      x: colX(COL_NODE),
-      y: cursorY + (groupH - NODE_HEIGHT) / 2,
-    })
-
-    podIds.forEach((podId, i) => {
-      positioned.set(podId, {
-        x: colX(COL_POD),
-        y: cursorY + i * (NODE_HEIGHT + POD_GAP),
-      })
-      placedPods.add(podId)
-    })
-
-    cursorY += groupH + GROUP_GAP
+    const edgeOrder = sourceToTargets.get(n.id) ?? []
+    const ordered =
+      edgeOrder.length > 0
+        ? edgeOrder.filter((id) => podIds.includes(id))
+        : [...podIds].sort((a, b) => sortKey(byId.get(a)!).localeCompare(sortKey(byId.get(b)!)))
+    nodeToPodIds.set(n.id, ordered)
   })
 
-  const unplacedPods = byType.pod.filter((p) => !placedPods.has(p.id))
-  if (unplacedPods.length > 0) {
-    unplacedPods.forEach((p) => {
-      positioned.set(p.id, { x: colX(COL_POD), y: cursorY })
-      cursorY += NODE_HEIGHT + POD_GAP
-    })
-    cursorY += GROUP_GAP - POD_GAP
+  // ── Build row list (NP edge order → no crossing between NP branches) ─────
+  const sortedNPs = [...byType.nodepool].sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+
+  interface Row {
+    ncId: string
+    nodeId: string | null
+    podIds: string[]
+    npId: string
   }
 
-  const nodeYById = new Map<string, number>()
-  k8sNodes.forEach((kNode) => {
-    const pos = positioned.get(kNode.id)
-    if (pos) nodeYById.set(String(kNode.data?.name ?? kNode.data?.label ?? ''), pos.y)
+  const rows: Row[] = []
+  sortedNPs.forEach((np) => {
+    const ncIds = sourceToTargets.get(np.id) ?? npToNcs.get(np.id) ?? []
+    ncIds.forEach((ncId) => {
+      const nodeIds = sourceToTargets.get(ncId) ?? []
+      const nodeId = nodeIds[0] ?? null
+      const podIds = nodeId ? (nodeToPodIds.get(nodeId) ?? []) : []
+      rows.push({ ncId, nodeId, podIds, npId: np.id })
+    })
   })
 
-  // Stack NodeClaims that share the same node to avoid edge overlap
-  const ncIndexByNode = new Map<string, number>()
-  const placedNCs = new Set<string>()
-  let ncOrphanY = cursorY
-  byType.nodeclaim.forEach((nc) => {
-    const linkedNodeName = ncToNode.get(nc.id)
-    if (linkedNodeName && nodeYById.has(linkedNodeName)) {
-      const nodeY = nodeYById.get(linkedNodeName)!
-      const count = ncCountByNode.get(linkedNodeName) ?? 1
-      const idx = ncIndexByNode.get(linkedNodeName) ?? 0
-      ncIndexByNode.set(linkedNodeName, idx + 1)
-      const ncSlotH = count * NODE_HEIGHT + (count - 1) * NC_GAP
-      const stackTop = nodeY - (ncSlotH - NODE_HEIGHT) / 2
-      const y = stackTop + idx * (NODE_HEIGHT + NC_GAP)
-      positioned.set(nc.id, { x: colX(COL_NC), y })
-      placedNCs.add(nc.id)
-    }
-  })
-  byType.nodeclaim.forEach((nc) => {
-    if (!placedNCs.has(nc.id)) {
-      const lastNodeY = k8sNodes.length > 0 ? Math.max(...[...nodeYById.values()]) + NODE_HEIGHT + GROUP_GAP : 0
-      const y = Math.max(ncOrphanY, lastNodeY)
-      positioned.set(nc.id, { x: colX(COL_NC), y })
-      ncOrphanY = y + NODE_HEIGHT + GROUP_GAP
-    }
+  // Orphan NCs (their NP wasn't in sortedNPs or they have no NP)
+  const rowNcIds = new Set(rows.map((r) => r.ncId))
+  const orphanNCs = byType.nodeclaim
+    .filter((n) => !rowNcIds.has(n.id))
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+  orphanNCs.forEach((nc) => {
+    const nodeIds = sourceToTargets.get(nc.id) ?? []
+    const nodeId = nodeIds[0] ?? null
+    const podIds = nodeId ? (nodeToPodIds.get(nodeId) ?? []) : []
+    rows.push({ ncId: nc.id, nodeId, podIds, npId: ncToNp.get(nc.id) ?? '' })
   })
 
-  const ncYById = new Map<string, number>()
-  byType.nodeclaim.forEach((nc) => {
-    const pos = positioned.get(nc.id)
-    if (pos) ncYById.set(nc.id, pos.y)
+  // ── Row height = height of its Pod column (or NODE_HEIGHT when no pods) ───
+  function calcRowHeight(row: Row): number {
+    const k = row.podIds.length
+    return k === 0 ? NODE_HEIGHT : k * NODE_HEIGHT + (k - 1) * VERTICAL_GAP
+  }
+
+  // ── Phase 1: assign rowTop for every row ─────────────────────────────────
+  // Rows in the same NP group: VERTICAL_GAP between them.
+  // Rows across NP groups: extra BRANCH_GAP.
+  const rowTops = new Map<string, number>()
+  const rowHeights = new Map<string, number>()
+  let cursor = 0
+  let lastNpId = ''
+
+  rows.forEach((row) => {
+    if (lastNpId !== '' && row.npId !== lastNpId) cursor += BRANCH_GAP
+    lastNpId = row.npId
+    rowTops.set(row.ncId, cursor)
+    const rh = calcRowHeight(row)
+    rowHeights.set(row.ncId, rh)
+    cursor += rh + VERTICAL_GAP
   })
 
-  let npOrphanY = 0
-  byType.nodepool.forEach((np) => {
-    const ncIds = npToNcs.get(np.id) ?? []
-    const linkedYs = ncIds.map((id) => ncYById.get(id)).filter((y): y is number => y !== undefined)
-    if (linkedYs.length > 0) {
-      const minY = Math.min(...linkedYs)
-      const maxY = Math.max(...linkedYs)
-      positioned.set(np.id, { x: colX(COL_NP), y: (minY + maxY) / 2 })
-    } else {
-      positioned.set(np.id, { x: colX(COL_NP), y: npOrphanY })
-      npOrphanY += NODE_HEIGHT + GROUP_GAP
+  const totalContentHeight = Math.max(0, cursor - VERTICAL_GAP)
+
+  // ── Phase 2: place NC, Node, Pods within each row ─────────────────────────
+  // • Pods: stacked from row-top, VERTICAL_GAP between each.
+  // • NC & Node: vertically centered inside the row (aligns with pod group center).
+  rows.forEach((row) => {
+    const top = rowTops.get(row.ncId)!
+    const rh = rowHeights.get(row.ncId)!
+    // Center of the row → NC/Node sit in the middle of their pod group.
+    const centeredY = top + (rh - NODE_HEIGHT) / 2
+
+    setPos(row.ncId, colX(COL_NC), centeredY)
+    if (row.nodeId) setPos(row.nodeId, colX(COL_NODE), centeredY)
+
+    row.podIds.forEach((podId, j) => {
+      setPos(podId, colX(COL_POD), top + j * (NODE_HEIGHT + VERTICAL_GAP))
+    })
+  })
+
+  // ── Phase 3: place each NodePool centered on its NC group ─────────────────
+  // NPs without NCs are stacked after all other content.
+  const orphanNPs: Node[] = []
+  sortedNPs.forEach((np) => {
+    const ncIds = sourceToTargets.get(np.id) ?? npToNcs.get(np.id) ?? []
+    if (ncIds.length === 0) {
+      orphanNPs.push(np)
+      return
     }
+    const firstTop = rowTops.get(ncIds[0]) ?? 0
+    const lastId = ncIds[ncIds.length - 1]
+    const lastTop = rowTops.get(lastId) ?? 0
+    const lastRh = rowHeights.get(lastId) ?? NODE_HEIGHT
+    const groupCenter = (firstTop + lastTop + lastRh) / 2
+    setPos(np.id, colX(COL_NP), groupCenter - NODE_HEIGHT / 2)
+  })
+  orphanNPs.forEach((np, i) => {
+    setPos(np.id, colX(COL_NP), totalContentHeight + BRANCH_GAP + i * (NODE_HEIGHT + VERTICAL_GAP))
+  })
+
+  // ── Unplaced nodes and their pods – laid out as pseudo-rows ─────────────
+  // Nodes without a NodeClaim path are grouped with their own pods so that
+  // the node is vertically centered on its pod group, matching the logic used
+  // for placed rows. This prevents nodes and pods from ending up at
+  // mismatched Y positions when no NodeClaim connects them.
+  const placedPods = new Set<string>()
+  rows.forEach((r) => r.podIds.forEach((id) => placedPods.add(id)))
+
+  const placedNodes = new Set(rows.filter((r) => r.nodeId).map((r) => r.nodeId!))
+  const unplacedNodes = byType.node
+    .filter((n) => !placedNodes.has(n.id))
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+
+  // Start unplaced section below all placed content, with extra spacing when
+  // there is placed content above.
+  let unplacedCursor = totalContentHeight > 0 ? totalContentHeight + BRANCH_GAP : 0
+
+  unplacedNodes.forEach((n) => {
+    const podIds = nodeToPodIds.get(n.id) ?? []
+    const k = podIds.length
+    const rowH = k === 0 ? NODE_HEIGHT : k * NODE_HEIGHT + (k - 1) * VERTICAL_GAP
+    // Center the node vertically within its pod group (same as placed rows).
+    const centeredY = unplacedCursor + (rowH - NODE_HEIGHT) / 2
+    setPos(n.id, colX(COL_NODE), centeredY)
+    podIds.forEach((podId, j) => {
+      setPos(podId, colX(COL_POD), unplacedCursor + j * (NODE_HEIGHT + VERTICAL_GAP))
+      placedPods.add(podId)
+    })
+    unplacedCursor += rowH + VERTICAL_GAP
+  })
+
+  // Pods with no node present in the graph at all – place them after everything else.
+  const unplacedFreePods = byType.pod
+    .filter((p) => !placedPods.has(p.id))
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
+  unplacedFreePods.forEach((p, i) => {
+    setPos(p.id, colX(COL_POD), unplacedCursor + i * (NODE_HEIGHT + VERTICAL_GAP))
   })
 
   const layoutedNodes = nodes.map((n): Node => {
-    const pos = positioned.get(n.id) ?? { x: 0, y: 0 }
+    const pos = positioned.get(n.id) ?? { x: colX(0), y: 0 }
     return {
       ...n,
-      position: pos,
+      position: { x: pos.x, y: pos.y },
       targetPosition: Position.Left,
       sourcePosition: Position.Right,
     }
@@ -377,6 +464,7 @@ function FitViewOnFilterChange({ cloudburstOnly }: { cloudburstOnly: boolean }) 
 
 export function GraphPage() {
   const { apiClusterId } = useCluster()
+  const { theme } = useTheme()
   const [cloudburstOnly, setCloudburstOnly] = useState(true)
   const { pods, nodeclaims, nodepools, nodes, isLoading, isError, error: fetchError } = useGraphData(apiClusterId)
 
@@ -392,8 +480,8 @@ export function GraphPage() {
     if (!p.length && !nc.length && !np.length && !n.length) {
       return { nodes: [] as Node[], edges: [] as Edge[] }
     }
-    const { nodes: rawNodes, edges: rawEdges, podsByNode, ncToNode, npToNcs } = buildGraphData(p, nc, np, n)
-    return getLayoutedElements(rawNodes, rawEdges, podsByNode, ncToNode, npToNcs)
+    const { nodes: rawNodes, edges: rawEdges, podsByNode, npToNcs } = buildGraphData(p, nc, np, n)
+    return getLayoutedElements(rawNodes, rawEdges, podsByNode, npToNcs)
   }, [filtered])
 
   const hasCloudBurstResources = useMemo(() => {
@@ -503,6 +591,7 @@ export function GraphPage() {
       <div className="w-full min-h-[400px] h-[min(600px,70vh)] rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-950 shadow-sm">
         <ReactFlowProvider>
           <ReactFlow
+            className={theme === 'dark' ? 'dark' : ''}
             nodes={flowNodes}
             edges={flowEdges}
             nodeTypes={nodeTypes}

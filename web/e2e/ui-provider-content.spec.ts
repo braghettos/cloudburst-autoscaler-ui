@@ -17,13 +17,18 @@ const basePath = `/clusters/${clusterId}`
 const CONTENT_TIMEOUT = 15000
 
 async function hasPageError(page: import('@playwright/test').Page): Promise<boolean> {
-  if ((await page.locator('[class*="bg-red-50"]').count()) > 0) return true
+  // Definite page load errors
   if ((await page.getByText('Cluster not found').count()) > 0) return true
   if ((await page.getByText('Failed to load').count()) > 0) return true
   if ((await page.getByText(/clusterId required|cluster id required/i).count()) > 0) return true
   if ((await page.getByText('404 page not found').count()) > 0) return true
   if ((await page.getByText(/Unexpected token/).count()) > 0) return true
   if ((await page.getByText(/is not valid JSON/).count()) > 0) return true
+  // bg-red-50 is used by both ErrorAlert (page error) and Overview's failed-claims banner (operational status).
+  // Only treat as error when main content is absent (page failed to load).
+  const hasMainContent = (await page.locator('main').getByText(/Cluster Overview|Workloads|Node Claims|Node Pools|Nodes|Resource Graph|Pods/).count()) > 0
+  if (hasMainContent) return false
+  if ((await page.locator('[class*="bg-red-50"]').count()) > 0) return true
   return false
 }
 

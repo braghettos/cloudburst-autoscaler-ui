@@ -34,6 +34,19 @@ const COLORS = [
   '#06b6d4', // cyan
 ]
 
+/** Truncate long x-axis labels to improve readability when there are many. */
+function truncateTick(value: string, maxLen = 14): string {
+  if (!value || value.length <= maxLen) return value
+  return `${value.slice(0, maxLen - 1)}…`
+}
+
+/** X-axis interval: show fewer ticks when many categories to avoid overlap. */
+function xAxisInterval(dataLength: number): number {
+  if (dataLength <= 8) return 0
+  if (dataLength <= 16) return 1
+  return Math.ceil(dataLength / 8)
+}
+
 export function MetricsPage() {
   const { apiClusterId } = useCluster()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -306,11 +319,27 @@ export function MetricsPage() {
                       <Tooltip formatter={(v: number | undefined) => [v ?? 0, 'count']} />
                     </PieChart>
                   ) : (
-                    <BarChart data={nodeClaimsActiveData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                    <BarChart
+                      data={nodeClaimsActiveData}
+                      margin={{
+                        top: 5,
+                        right: 5,
+                        left: 5,
+                        bottom: nodeClaimsActiveData.length > 8 ? 50 : 5,
+                      }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 10 }}
+                        tickFormatter={(v) => truncateTick(v)}
+                        interval={xAxisInterval(nodeClaimsActiveData.length)}
+                        angle={nodeClaimsActiveData.length > 8 ? -35 : 0}
+                        textAnchor={nodeClaimsActiveData.length > 8 ? 'end' : 'middle'}
+                        height={nodeClaimsActiveData.length > 8 ? 50 : 30}
+                      />
                       <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip />
+                      <Tooltip formatter={(v, _n, props: { payload?: { name?: string } }) => [v, props.payload?.name ?? '']} />
                       <Bar dataKey="value" fill={COLORS[0]} name="count" />
                     </BarChart>
                   )}
@@ -323,11 +352,27 @@ export function MetricsPage() {
                 dataLength={providerErrorsData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={providerErrorsData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={providerErrorsData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: providerErrorsData.length > 6 ? 55 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-15} textAnchor="end" height={50} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(providerErrorsData.length)}
+                      angle={providerErrorsData.length > 6 ? -35 : -15}
+                      textAnchor="end"
+                      height={providerErrorsData.length > 6 ? 55 : 50}
+                    />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v, _n, props: { payload?: { name?: string } }) => [v, props.payload?.name ?? '']} />
                     <Bar dataKey="value" fill="#ef4444" name="errors" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -339,11 +384,27 @@ export function MetricsPage() {
                 dataLength={scaleEventsData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={scaleEventsData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={scaleEventsData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: scaleEventsData.length > 6 ? 55 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-15} textAnchor="end" height={50} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(scaleEventsData.length)}
+                      angle={scaleEventsData.length > 6 ? -35 : -15}
+                      textAnchor="end"
+                      height={scaleEventsData.length > 6 ? 55 : 50}
+                    />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v, _n, props: { payload?: { name?: string } }) => [v, props.payload?.name ?? '']} />
                     <Bar dataKey="value" fill={COLORS[0]} name="events" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -355,11 +416,27 @@ export function MetricsPage() {
                 dataLength={phaseTransitionsData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={phaseTransitionsData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={phaseTransitionsData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: phaseTransitionsData.length > 6 ? 60 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-20} textAnchor="end" height={60} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 9 }}
+                      tickFormatter={(v) => truncateTick(v, 12)}
+                      interval={xAxisInterval(phaseTransitionsData.length)}
+                      angle={phaseTransitionsData.length > 6 ? -35 : -20}
+                      textAnchor="end"
+                      height={phaseTransitionsData.length > 6 ? 60 : 50}
+                    />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(v, _n, props: { payload?: { name?: string } }) => [v, props.payload?.name ?? '']} />
                     <Bar dataKey="value" fill={COLORS[2]} name="transitions" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -376,11 +453,27 @@ export function MetricsPage() {
                 dataLength={provisioningDurationData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={provisioningDurationData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={provisioningDurationData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: provisioningDurationData.length > 6 ? 50 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(provisioningDurationData.length)}
+                      angle={provisioningDurationData.length > 6 ? -35 : 0}
+                      textAnchor={provisioningDurationData.length > 6 ? 'end' : 'middle'}
+                      height={provisioningDurationData.length > 6 ? 50 : 30}
+                    />
                     <YAxis tick={{ fontSize: 10 }} label={{ value: 'seconds', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number } }) => props.payload ? `${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})` : ''} />
+                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number; name?: string } }) => props.payload ? [`${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})`, props.payload.name] : ''} />
                     <Bar dataKey="value" fill={COLORS[1]} name="avg seconds" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -392,11 +485,27 @@ export function MetricsPage() {
                 dataLength={joiningDurationData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={joiningDurationData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={joiningDurationData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: joiningDurationData.length > 6 ? 50 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(joiningDurationData.length)}
+                      angle={joiningDurationData.length > 6 ? -35 : 0}
+                      textAnchor={joiningDurationData.length > 6 ? 'end' : 'middle'}
+                      height={joiningDurationData.length > 6 ? 50 : 30}
+                    />
                     <YAxis tick={{ fontSize: 10 }} label={{ value: 'seconds', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number } }) => props.payload ? `${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})` : ''} />
+                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number; name?: string } }) => props.payload ? [`${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})`, props.payload.name] : ''} />
                     <Bar dataKey="value" fill={COLORS[4]} name="avg seconds" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -408,11 +517,27 @@ export function MetricsPage() {
                 dataLength={drainDurationData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={drainDurationData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={drainDurationData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: drainDurationData.length > 6 ? 50 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(drainDurationData.length)}
+                      angle={drainDurationData.length > 6 ? -35 : 0}
+                      textAnchor={drainDurationData.length > 6 ? 'end' : 'middle'}
+                      height={drainDurationData.length > 6 ? 50 : 30}
+                    />
                     <YAxis tick={{ fontSize: 10 }} label={{ value: 'seconds', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number } }) => props.payload ? `${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})` : ''} />
+                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number; name?: string } }) => props.payload ? [`${(props.payload.fullValue ?? 0).toFixed(1)}s (n=${props.payload.count ?? 0})`, props.payload.name] : ''} />
                     <Bar dataKey="value" fill={COLORS[3]} name="avg seconds" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -424,11 +549,27 @@ export function MetricsPage() {
                 dataLength={cloudbrokerLatencyData.length}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={cloudbrokerLatencyData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <BarChart
+                    data={cloudbrokerLatencyData}
+                    margin={{
+                      top: 5,
+                      right: 5,
+                      left: 5,
+                      bottom: cloudbrokerLatencyData.length > 6 ? 50 : 5,
+                    }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" className="opacity-50" />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(v) => truncateTick(v)}
+                      interval={xAxisInterval(cloudbrokerLatencyData.length)}
+                      angle={cloudbrokerLatencyData.length > 6 ? -35 : 0}
+                      textAnchor={cloudbrokerLatencyData.length > 6 ? 'end' : 'middle'}
+                      height={cloudbrokerLatencyData.length > 6 ? 50 : 30}
+                    />
                     <YAxis tick={{ fontSize: 10 }} label={{ value: 'ms', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number } }) => props.payload ? `${Math.round((props.payload.fullValue ?? 0) * 1000)}ms (n=${props.payload.count ?? 0})` : ''} />
+                    <Tooltip formatter={(_, __, props: { payload?: { fullValue?: number; count?: number; name?: string } }) => props.payload ? [`${Math.round((props.payload.fullValue ?? 0) * 1000)}ms (n=${props.payload.count ?? 0})`, props.payload.name] : ''} />
                     <Bar dataKey="value" fill={COLORS[5]} name="avg ms" />
                   </BarChart>
                 </ResponsiveContainer>
